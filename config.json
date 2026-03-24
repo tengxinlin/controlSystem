@@ -1,0 +1,30 @@
+{
+    "map": {
+        "center": [
+            29.58,
+            106.65
+        ],
+        "zoom": 14
+    },
+    "window": {
+        "width": 1024,
+        "height": 768,
+        "maximized": false
+    },
+    "other_settings": {
+        "theme": "light"
+    },
+    "login": {
+        "IP_address": "http://isc.cqu.edu.cn:23456",
+        "remember_password": true,
+        "last_username": "梁山",
+        "last_password": "Cqhdj@2024"
+    },
+    "controlRiverName": "铜锣峡",
+    "reachCode": 35,
+    "weather": "晴",
+    "waterLevel": 4,
+    "shipDataSource": "ais",
+    "aisTimeliness": 5,
+    "InternetType": "外网"
+}

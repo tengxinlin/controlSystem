@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1920</width>
+    <height>1080</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>控制河段指挥系统</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_10">
+    <item>
+     <layout class="QVBoxLayout" name="verticalLayout_9">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_8">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_6">
+          <item>
+           <widget class="QComboBox" name="comboBox"/>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_7">
+            <item>
+             <widget class="QRadioButton" name="radioButton">
+              <property name="text">
+               <string>开班</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioButton_2">
+              <property name="text">
+               <string>收班</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_4">
+            <item>
+             <widget class="QWidget" name="widget" native="true">
+              <layout class="QVBoxLayout" name="verticalLayout_5">
+               <item>
+                <widget class="QLabel" name="label_5">
+                 <property name="text">
+                  <string>图片</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_6">
+                 <property name="text">
+                  <string>文字</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="widget_2" native="true">
+              <layout class="QVBoxLayout" name="verticalLayout_6">
+               <item>
+                <widget class="QLabel" name="label_7">
+                 <property name="text">
+                  <string>图片</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_8">
+                 <property name="text">
+                  <string>文字</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_5">
+          <item>
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>值班状态</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_10">
+            <property name="text">
+             <string>揭示信号</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_11">
+            <property name="text">
+             <string>天气</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_12">
+            <property name="text">
+             <string>水位</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_13">
+            <property name="text">
+             <string>数据源</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_7">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_8">
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_4">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_3">
+              <item>
+               <widget class="QLabel" name="label_4">
+                <property name="text">
+                 <string>船舶通行队列</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_6">
+                <property name="text">
+                 <string>添加船舶</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_7">
+                <property name="text">
+                 <string>删除船舶</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_8">
+                <property name="text">
+                 <string>清空船舶</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QTableView" name="tableView"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout">
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout">
+              <item>
+               <widget class="QLabel" name="label_2">
+                <property name="text">
+                 <string>已揭示船舶</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QTableView" name="tableView_2"/>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_2">
+              <item>
+               <widget class="QLabel" name="label_3">
+                <property name="text">
+                 <string>控制河段船舶</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QTableView" name="tableView_3"/>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QPlainTextEdit" name="plainTextEdit"/>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_3">
+            <item>
+             <widget class="QLabel" name="label">
+              <property name="text">
+               <string>信号揭示</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <widget class="QPushButton" name="pushButton">
+                <property name="text">
+                 <string>上水</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_2">
+                <property name="text">
+                 <string>下水</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_3">
+                <property name="text">
+                 <string>半杆</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_4">
+                <property name="text">
+                 <string>关闭</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_5">
+                <property name="text">
+                 <string>禁航</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QWebView" name="webView">
+          <property name="url">
+           <url>
+            <string>about:blank</string>
+           </url>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QWebView</class>
+   <extends>QWidget</extends>
+   <header location="global">QtWebKitWidgets/QWebView</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
