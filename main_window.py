@@ -512,6 +512,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
            #根据界限标和鸣笛标区计算获取区域
             reach.__post_init__()
 
+
             # 加载航道里程线数据
             self.load_channel_mileage_for_reach(reach)
 
@@ -613,8 +614,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.mileage_manager._subdivide_regions()
 
             #计算上界限标的中心点坐标
-            lat=(self.current_reach.up_bound_line.start.lat+self.current_reach.up_bound_line.end.lat)/2
-            lon=(self.current_reach.down_bound_line.start.lon+self.current_reach.down_bound_line.end.lon)/2
+            lat=(reach.up_bound_line.start.lat+reach.up_bound_line.end.lat)/2
+            lon=(reach.down_bound_line.start.lon+reach.down_bound_line.end.lon)/2
 
             self.mileage_manager.calculate_upBoardkm(lat,lon)
 

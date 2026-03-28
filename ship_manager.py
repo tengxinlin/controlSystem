@@ -30,12 +30,15 @@ class ShipInfo:
     latitude: float  # 纬度
     heading: float  # 航向 (0-360度)
     speed: float  # 速度 (节)
-    direction: ShipDirection = ShipDirection.UNKNOWN  # 上下行状态
+    direction: ShipDirection = ShipDirection.UNKNOWN  # 上下行状态和停靠状态
     timestamp: float = 0  # 时间戳
-    last_update: float = 0  # 最后更新时间
-    position_and_direction:dict = None
+    last_update_time: str=''  # 最后更新时间
+    position_and_direction:dict = None  #位置和方向信息
     calc_range:str = None #船舶是否在上下水计算范围，"up"，‘down’
-    up_or_down: list = None  #四个bool值列表，true为上水，false为下水
+    up_or_down: list = None  #四个bool值列表，true为下水，false为上水
+    status: str = None #船舶的状态，上水、下水、停靠、特殊
+    shipType: str =None  #船舶的人工设定状态,None:未设定，'up','down','docked','special'
+
 
 
     def to_dict(self):
@@ -47,10 +50,10 @@ class ShipInfo:
             'latitude': self.latitude,
             'heading': self.heading,
             'speed': self.speed,
-            'direction': self.direction,
             'timestamp': self.timestamp,
-            # 'calc_range': self.calc_range,
-            # 'in_command_queue': self.calc_range is not None
+            'status': self.status,
+            'shipType': self.shipType if self.shipType is not None else "",
+            'last_update_time': self.last_update_time,
         }
 
 
@@ -132,7 +135,7 @@ class ShipManager(QObject):
                 old_ship = self.ships[mmsi]
 
                 # 检查上次更新时间是否在最小间隔内
-                time_diff = current_time - old_ship.last_update
+                time_diff = current_time - old_ship.timestamp
                 if time_diff < min_update_interval:
                     # 可选：记录调试信息
                     # print(f"船舶 {mmsi} 更新过于频繁，上次更新在 {time_diff:.2f} 秒前，跳过更新")
@@ -170,19 +173,42 @@ class ShipManager(QObject):
                 if position_and_direction["direction"] == "down":
                     del old_ship.up_or_down[0]
                     old_ship.up_or_down.append(True)
-                #上下水状态列表全为真,方向确定为下水
-                if all(old_ship.up_or_down):
-                    position_and_direction["direction"] = "down"
+                if position_and_direction["direction"] == "docked":
+                    ship.status='docked'
+
+                #船舶不是特殊船舶就再调用一次
+                if old_ship.status!= 'special':
+                    is_special_ship = self.api_service.is_special_ship(mmsi)
+                    #如果是特殊船舶，但是之前没判断成特殊船舶
+                    if is_special_ship:
+                        old_ship.status = 'special'
+
+                # 船舶设定状态了
+                if old_ship.shipType:
+                    ship.status = old_ship.shipType
+                    ship.shipType = old_ship.shipType
+
+                #船舶是特殊船舶
+                elif old_ship.status=='special':
+                    ship.status = 'special'
+
+                #新船舶是停靠船舶
+                elif  ship.status=='docked':
+                    ship.status = 'docked'
+
+                # 上下水状态列表全为真,并且船舶类型未被设定
+                elif all(old_ship.up_or_down):
+                    ship.status = "down"
                 elif not all(old_ship.up_or_down):
-                    position_and_direction["direction"] = "up"
+                    ship.status = "up"
                 else:
-                    position_and_direction["direction"] = old_ship.position_and_direction["direction"]
+                    ship.status = old_ship.status
 
                 #船舶的上下水列表更新
                 ship.up_or_down=old_ship.up_or_down
                 ship.position_and_direction=position_and_direction
 
-                ship.direction=position_and_direction["direction"]
+
 
                 # 判断是否在计算范围内
                 in_up_calc = position_and_direction.get('in_up_calc_range', False)
@@ -196,8 +222,10 @@ class ShipManager(QObject):
                     calc_range = 'down'
 
                 ship.calc_range = calc_range
-                # 更新时间戳
-                ship.last_update = current_time
+
+                # 转换为本地时间的结构化对象
+                local_time = time.localtime(current_time)
+                ship.last_update_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
 
                 # 更新信息
                 self.ships[mmsi] = ship
@@ -249,20 +277,35 @@ class ShipManager(QObject):
                     ship.up_or_down = [True,True,True,True]
                 elif position_and_direction["direction"] == "up":
                     ship.up_or_down = [False,False,False,False]
+                elif position_and_direction["direction"] == "docked":
+                    ship.status='docked'
+                    ship.up_or_down = [True,False,True,False]
                 else:
                     ship.up_or_down = [False,True,False,True]#不是的就一半真一半假
 
+                is_special_ship = self.api_service.is_special_ship(mmsi)
+                #如果是特殊船舶，判断状态未特殊船舶
+                if is_special_ship:
+                    ship.status = "special"
+                #不是特殊船舶但是是停靠船舶
+                elif ship.status=='docked':
+                    ship.status = "docked"
                 # 上下水状态列表全为真,方向确定为下水
-                if all(ship.up_or_down):
-                    position_and_direction["direction"] = "down"
+                elif all(ship.up_or_down) :
+                    ship.status = "down"
                 elif not all(ship.up_or_down):
-                    position_and_direction["direction"] = "up"
+                    ship.status = "up"
+                #第一次状态没判断出来是上下水
+                else:
+                    ship.status = "unknown"
 
 
                 ship.position_and_direction = position_and_direction
-                ship.direction = position_and_direction["direction"]
 
-                ship.last_update = current_time
+                # 转换为本地时间的结构化对象
+                local_time = time.localtime(current_time)
+                ship.last_update_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
+
                 self.ships[mmsi] = ship
                 self._init_track_history(mmsi)
                 self._add_to_track_history(mmsi, ship.longitude,

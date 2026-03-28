@@ -239,8 +239,7 @@ class APIManager(QObject):
             if response.status_code == 200:
                 try:
                     data = response.json().get('data')
-                    print(f"data: {data}")
-                   # self.request_success.emit(api_name, data)
+
                     return data
                 except json.JSONDecodeError:
                     # 如果不是JSON，返回文本
@@ -254,12 +253,12 @@ class APIManager(QObject):
                 self.session_expired.emit()
                 error_msg = f"{api_name}: Session已过期"
                 self.request_failed.emit(api_name, error_msg)
-                print(f"")
+
 
             else:
                 error_msg = f"{api_name}失败: {response.status_code} - {response.text}"
                 self.request_failed.emit(api_name, error_msg)
-                print(error_msg)
+
 
             return None
 
@@ -609,6 +608,14 @@ class APIService:
         data= {}
         # data= self.api_manager.get("/api/Ship/GetShipName", {"MMSI": mmsi})
         return data.get("ShipName","")  if data else ""
+
+    def is_special_ship(self,mmsi):
+        data=0
+        # data= self.api_manager.get("/api/Ship/GetIsSpecialShips", {"MMSI": mmsi})
+        if data==1:
+            return True
+        else:
+            return False
 
 # ========== 使用示例 ==========
 if __name__ == "__main__":

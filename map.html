@@ -1,33 +1,33 @@
- <!DOCTYPE html>
-        <html>
-        <head>
-            <title>123</title>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="stylesheet" href="leaflet.css" />
-            <script src="leaflet.js"></script>
-            <script src="ships.js"></script>
-            <script src="ShipManager.js"></script>
-            <style>
-#map {
-        height: 100%;
-        width: 100%;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-    }
-    body, html {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
-    }
-                .leaflet-control-attribution { display: none !important; }
-                .ship-icon { background: transparent; border: none; }
-                 /* 按钮容器 - 绝对定位在地图左上角 */
+<!DOCTYPE html>
+<html>
+<head>
+    <title>123</title>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <link href="leaflet.css" rel="stylesheet" />
+    <script src="leaflet.js"></script>
+    <script src="ships.js"></script>
+    <script src="ShipManager.js"></script>
+    <style>
+        #map {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+        .leaflet-control-attribution { display: none !important; }
+        .ship-icon { background: transparent; border: none; }
+        /* 按钮容器 - 绝对定位在地图左上角 */
         .button-panel {
             position: absolute;
             top: 10px;
@@ -58,35 +58,35 @@
             transform: translateY(-2px);
         }
         /* 复选框组样式 */
-    .checkbox-group {
-        margin-top: 10px;
-        border-top: 1px solid #eee;
-        padding-top: 10px;
-    }
+        .checkbox-group {
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
 
-    .checkbox-label {
-        display: flex;
-        align-items: center;
-        margin: 8px 0;
-        cursor: pointer;
-        font-size: 13px;
-    }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            cursor: pointer;
+            font-size: 13px;
+        }
 
-    .checkbox-label input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        margin-right: 8px;
-        cursor: pointer;
-    }
+        .checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            cursor: pointer;
+        }
 
-    .checkbox-text {
-        font-weight: bold;
-    }
+        .checkbox-text {
+            font-weight: bold;
+        }
 
-    /* 可选：添加一些悬停效果 */
-    .checkbox-label:hover {
-        opacity: 0.8;
-    }
+        /* 可选：添加一些悬停效果 */
+        .checkbox-label:hover {
+            opacity: 0.8;
+        }
 
         /* 不同按钮颜色 */
         .btn-add { background: #3498db; }
@@ -97,491 +97,447 @@
         .btn-info { background: #34495e; }
     </style>
 
-        </head>
-        <body>
-            <div id="map" ></div>
-             <!-- 按钮面板 -->
-    <div class="button-panel">
-<!--        <button class="btn-add" onclick="addShip()">添加船舶</button>-->
-<!--        <button class="btn-clear" onclick="clearAll()">清除所有</button>-->
-<!--        <button class="btn-zoom-in" onclick="zoomIn()">放大</button>-->
-<!--        <button class="btn-zoom-out" onclick="zoomOut()">缩小</button>-->
-        <button class="btn-reset" onclick="resetView()">重置视图</button>
-<!--        <button class="btn-info" onclick="showInfo()">显示信息</button>-->
-        <!-- 添加复选框组 -->
+</head>
+<body>
+<div id="map" ></div>
+<!-- 按钮面板 -->
+<div class="button-panel">
+
+    <button class="btn-reset" onclick="resetView()">重置视图</button>
+
+    <!-- 船舶显示控制 -->
     <div class="checkbox-group">
-        <label class="checkbox-label">
-            <input type="checkbox" id="showUpCalc" checked onchange="toggleCalcLayer('calc', this.checked)">
-            <span class="checkbox-text" style="color: #00ff00;">显示上下游计算范围</span>
-        </label>
+        <div class="control-title">船舶显示控制</div>
 
-        <!-- 新增停泊区控制 -->
+
         <label class="control-item">
-            <input type="checkbox" id="showParkAreas" checked onchange="toggleCalcLayer('park', this.checked)">
-            <span class="color-dot" style="background-color: #3388ff;"></span>
-            <span>停泊区</span>
+            <input checked id="showDockedShips" onchange="toggleShipType('docked', this.checked)" type="checkbox">
+            <span class="color-dot" style="background-color: #2c3e50;"></span>
+            <span>停靠船舶</span>
+            <span id="dockedShipsCount" style="margin-left: auto; font-size: 11px; color: #666;">(0)</span>
         </label>
 
-        <!-- 新增特殊区控制 -->
         <label class="control-item">
-            <input type="checkbox" id="showSpecialAreas" checked onchange="toggleCalcLayer('special', this.checked)">
-            <span class="color-dot" style="background-color: #ff6633;"></span>
-            <span>特殊区</span>
+            <input checked id="showSpecialShips" onchange="toggleShipType('special', this.checked)" type="checkbox">
+            <span class="color-dot" style="background-color: #ffaa00;"></span>
+            <span>特殊船舶</span>
+            <span id="specialShipsCount" style="margin-left: auto; font-size: 11px; color: #666;">(0)</span>
         </label>
-    </div>
+
+        <!-- 添加复选框组 -->
+        <div class="checkbox-group">
+            <label class="checkbox-label">
+                <input checked id="showCalc" onchange="toggleCalcLayer('calc', this.checked)" type="checkbox">
+                <span class="checkbox-text" style="color: #00ff00;">显示上下游计算范围</span>
+            </label>
+
+            <!-- 新增停泊区控制 -->
+            <label class="control-item">
+                <input checked id="showParkAreas" onchange="toggleCalcLayer('park', this.checked)" type="checkbox">
+                <span class="color-dot" style="background-color: #3388ff;"></span>
+                <span>停泊区</span>
+            </label>
+
+            <!-- 新增特殊区控制 -->
+            <label class="control-item">
+                <input checked id="showSpecialAreas" onchange="toggleCalcLayer('special', this.checked)" type="checkbox">
+                <span class="color-dot" style="background-color: #ff6633;"></span>
+                <span>特殊区</span>
+            </label>
+        </div>
     </div>
 
-            <script >
-//
-                // 地图初始化
-                // 初始化地图
-                var shipLayerGroup;
-                let map;
-                let centerLat,centerLng
-                //船舶标记字典，mmsi做key，船舶图标marker做value
-                let shipMarkers={}
-function initMap(lat = 29.58, lng = 106.65, zoom = 14) {
-    if (map) {
-        map.remove();  // 如果地图已存在，先销毁（可选，避免重复叠加图层）
-    }
-    centerLat=lat;
-    centerLng=lng
-    map = L.map('map', {
-        attributionControl: false,
-        zoomControl: false,
-        minZoom: 10,
-        maxZoom: 18,
-        doubleClickZoom: false
-    }).setView([lat, lng], zoom);
-    shipLayerGroup = L.layerGroup().addTo(map);
+    <script >
+        //
+        // 地图初始化
+        // 初始化地图
+        var shipLayerGroup;
+        let map;
+        let centerLat,centerLng
+        //船舶标记字典，mmsi做key，船舶图标marker做value
+        let shipMarkers={}
+        function initMap(lat = 29.58, lng = 106.65, zoom = 14) {
+            if (map) {
+                map.remove();  // 如果地图已存在，先销毁（可选，避免重复叠加图层）
+            }
+            centerLat=lat;
+            centerLng=lng
+            map = L.map('map', {
+                attributionControl: false,
+                zoomControl: false,
+                minZoom: 10,
+                maxZoom: 18,
+                doubleClickZoom: false
+            }).setView([lat, lng], zoom);
+            shipLayerGroup = L.layerGroup().addTo(map);
 
 
 // 高德街道图
-    L.tileLayer('http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
-        subdomains: ['1', '2', '3', '4'],
-        attribution: '© 高德地图'
-    }).addTo(map);
+            L.tileLayer('http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                subdomains: ['1', '2', '3', '4'],
+                attribution: '© 高德地图'
+            }).addTo(map);
 
 
 
 // 确保地图正确显示
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 100);
-    console.log('地图初始化完成');
-    console.log(centerLng,centerLat)
-}
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
+            console.log('地图初始化完成');
+            console.log(centerLng,centerLat)
+        }
 
-function resetView(){
+        function resetView(){
 
-     map.setView([centerLat, centerLng], 14)
-    const newShip = new Ship({
+            map.setView([centerLat, centerLng], 14)
+            const newShip = new Ship({
 
-            MMSI:23333,
-            name: 'test',
+                MMSI:23333,
+                name: 'test',
                 lat: 29.68,
                 lng: 106.85,
                 heading: 10,
-            status:'up'
-        })
-    updateShipMarker(newShip)
+                status:'up'
+            })
+            updateShipMarker(newShip)
 
-}
+        }
 
-function drawReach(data) {
-    // 清除现有的所有图层
-    if (window.reachLayers) {
-        window.reachLayers.clearLayers();
-    } else {
-        window.reachLayers = L.layerGroup().addTo(map);
-    }
-
- // 创建单独的图层组用于不同类型的要素
-        if (!window.layerGroups) {
-            window.layerGroups = {
-                bound: L.layerGroup().addTo(map),
-                whistle: L.layerGroup().addTo(map),
-                calc: L.layerGroup().addTo(map),
-                park: L.layerGroup().addTo(map),
-                special: L.layerGroup().addTo(map)
-            };
-        } else {
-            for (var key in window.layerGroups) {
-                window.layerGroups[key].clearLayers();
+        function drawReach(data) {
+            // 清除现有的所有图层
+            if (window.reachLayers) {
+                window.reachLayers.clearLayers();
+            } else {
+                window.reachLayers = L.layerGroup().addTo(map);
             }
-        }
-    // ... 绘制其他要素（界限标、鸣笛标等）到 reachLayers ...
+
+            // 创建单独的图层组用于不同类型的要素
+            if (!window.layerGroups) {
+                window.layerGroups = {
+                    bound: L.layerGroup().addTo(map),
+                    whistle: L.layerGroup().addTo(map),
+                    calc: L.layerGroup().addTo(map),
+                    park: L.layerGroup().addTo(map),
+                    special: L.layerGroup().addTo(map)
+                };
+            } else {
+                for (var key in window.layerGroups) {
+                    window.layerGroups[key].clearLayers();
+                }
+            }
+            // ... 绘制其他要素（界限标、鸣笛标等）到 reachLayers ...
 // 定义样式
-                        var styles = {
-                            // 界限标样式（线段）
-                            boundLine: {
-                                color: '#ff0000',
-                                weight: 4,
-                                opacity: 0.9
-                            },
-                            // 鸣笛标样式（线段）
-                            whistle: {
-                                color: '#ff9900',
-                                weight: 2,
-                                 opacity: 0.9
-                            },
-                            // 计算范围样式（多边形）
-                            calcPolygon: {
-                                color: '#00ff00',
-                                weight: 2,
-                                opacity: 0.7,
-                                fillColor: '#00ff00',
-                                fillOpacity: 0.2,
-                                dashArray: '5, 5'
-                            }
-                        };
-
-                        // 绘制上下界限标（线段）
-                        if (data.upBordLine) {
-                            var polyline = L.polyline(data.upBordLine, {
-                                color: '#ff0000',
-                                weight: 4,
-                                opacity: 0.9
-                            }).addTo(window.layerGroups.bound);
-                            // 为起点添加提示框（左侧）
-                            var startPoint = data.upBordLine[0];
-                            var startMarker = L.circleMarker(startPoint, {
-                                radius: 4,
-                                color: '#ff0000',
-                                weight: 2,
-                                fillColor: '#ff0000',
-                                fillOpacity: 0.8
-                            }).addTo(window.layerGroups.bound);
-
-                            startMarker.bindTooltip('上游界限标起点', {
-                                permanent: true,
-                                direction: 'left',      // 显示在左侧
-                                offset: [-10, 0],       // 向左偏移10像素
-                                className: 'endpoint-tooltip'
-                            });
-                        }
-
-                        if (data.downBordLine) {
-                            var polyline = L.polyline(data.downBordLine, {
-                                color: '#ff0000',
-                                weight: 4,
-                                opacity: 0.9
-                            }).addTo(window.layerGroups.bound);
-                           // 为起点添加提示框（左侧）
-                            var startPoint = data.downBordLine[0];
-                            var startMarker = L.circleMarker(startPoint, {
-                                radius: 4,
-                                color: '#ff0000',
-                                weight: 2,
-                                fillColor: '#ff0000',
-                                fillOpacity: 0.8
-                            }).addTo(window.layerGroups.bound);
-
-                            startMarker.bindTooltip('下游界限标起点', {
-                                permanent: true,
-                                direction: 'left',      // 显示在左侧
-                                offset: [-10, 0],       // 向左偏移10像素
-                                className: 'endpoint-tooltip'
-                            });
-                        }
-
-                        // 绘制上下鸣笛标（点）
-                        if (data.upWhistle) {
-                            var polyline = L.polyline(data.upWhistle, {
-                                color: '#0000ff',
-                                weight: 4,
-                                opacity: 0.9
-                            }).addTo(window.layerGroups.whistle);
-                           // 为起点添加提示框（左侧）
-                            var startPoint = data.upWhistle[0];
-                            var startMarker = L.circleMarker(startPoint, {
-                                radius: 4,
-                                color: '#ff0000',
-                                weight: 2,
-                                fillColor: '#ff0000',
-                                fillOpacity: 0.8
-                            }).addTo(window.layerGroups.whistle);
-
-                            startMarker.bindTooltip('上鸣笛标标起点', {
-                                permanent: true,
-                                direction: 'left',      // 显示在左侧
-                                offset: [-10, 0],       // 向左偏移10像素
-                                className: 'endpoint-tooltip'
-                            });
-                        }
-
-                        if (data.downWhistle) {
-                             var polyline = L.polyline(data.downWhistle, {
-                                color: '#0000ff',
-                                weight: 4,
-                                opacity: 0.9
-                            }).addTo(window.layerGroups.whistle);
-                             // 为起点添加提示框（左侧）
-                            var startPoint = data.downWhistle[0];
-                            var startMarker = L.circleMarker(startPoint, {
-                                radius: 4,
-                                color: '#ff0000',
-                                weight: 2,
-                                fillColor: '#ff0000',
-                                fillOpacity: 0.8
-                            }).addTo(window.layerGroups.whistle);
-
-                            startMarker.bindTooltip('下鸣笛标标起点', {
-                                permanent: true,
-                                direction: 'left',      // 显示在左侧
-                                offset: [-10, 0],       // 向左偏移10像素
-                                className: 'endpoint-tooltip'
-                            });
-                        }
-    // 绘制上游计算范围到单独的图层
-    if (data.upCalcPolygon) {
-        upCalcLayer = L.polygon(data.upCalcPolygon, {
-            color: '#00ff00',
-            weight: 2,
-            opacity: 0.7,
-            fillColor: '#00ff00',
-            fillOpacity: 0.2
-        }).addTo(window.layerGroups.calc);
-
-        upCalcLayer.bindTooltip('上游计算范围', {
-            permanent: false,
-            direction: 'center'
-        });
-    }
-
-    // 绘制下游计算范围到单独的图层
-    if (data.downCalcPolygon) {
-        downCalcLayer = L.polygon(data.downCalcPolygon, {
-            color: '#ff00ff',
-            weight: 2,
-            opacity: 0.7,
-            fillColor: '#ff00ff',
-            fillOpacity: 0.2
-        }).addTo(window.layerGroups.calc);
-
-        downCalcLayer.bindTooltip('下游计算范围', {
-            permanent: false,
-            direction: 'center'
-        });
-    }
-     // 绘制停泊区
-        if (data.parkAreas && data.parkAreas.length > 0) {
-            data.parkAreas.forEach(function(area) {
-                var polygon = L.polygon(area.points, styles.park)
-                    .addTo(window.layerGroups.park);
-                polygon.bindTooltip('停泊区: ' + area.name, {permanent: false, direction: 'center'});
-
-                // 添加名称标签
-                var center = getPolygonCenter(area.points);
-                if (center) {
-                    L.marker(center, {
-                        icon: L.divIcon({
-                            className: 'fence-label',
-                            html: '<div style="background-color: rgba(51,136,255,0.7); color: white; padding: 2px 5px; border-radius: 3px; font-size: 11px;">' + area.name + '</div>',
-                            iconSize: [60, 18],
-                            iconAnchor: [30, 9]
-                        })
-                    }).addTo(window.layerGroups.park);
+            var styles = {
+                // 界限标样式（线段）
+                boundLine: {
+                    color: '#ff0000',
+                    weight: 4,
+                    opacity: 0.9
+                },
+                // 鸣笛标样式（线段）
+                whistle: {
+                    color: '#ff9900',
+                    weight: 2,
+                    opacity: 0.9
+                },
+                // 计算范围样式（多边形）
+                calcPolygon: {
+                    color: '#00ff00',
+                    weight: 2,
+                    opacity: 0.7,
+                    fillColor: '#00ff00',
+                    fillOpacity: 0.2,
+                    dashArray: '5, 5'
                 }
+            };
+
+            // 绘制上下界限标（线段）
+            if (data.upBordLine) {
+                var polyline = L.polyline(data.upBordLine, {
+                    color: '#ff0000',
+                    weight: 4,
+                    opacity: 0.9
+                }).addTo(window.layerGroups.bound);
+                // 为起点添加提示框（左侧）
+                var startPoint = data.upBordLine[0];
+                var startMarker = L.circleMarker(startPoint, {
+                    radius: 4,
+                    color: '#ff0000',
+                    weight: 2,
+                    fillColor: '#ff0000',
+                    fillOpacity: 0.8
+                }).addTo(window.layerGroups.bound);
+
+                startMarker.bindTooltip('上游界限标起点', {
+                    permanent: true,
+                    direction: 'left',      // 显示在左侧
+                    offset: [-10, 0],       // 向左偏移10像素
+                    className: 'endpoint-tooltip'
+                });
+            }
+
+            if (data.downBordLine) {
+                var polyline = L.polyline(data.downBordLine, {
+                    color: '#ff0000',
+                    weight: 4,
+                    opacity: 0.9
+                }).addTo(window.layerGroups.bound);
+                // 为起点添加提示框（左侧）
+                var startPoint = data.downBordLine[0];
+                var startMarker = L.circleMarker(startPoint, {
+                    radius: 4,
+                    color: '#ff0000',
+                    weight: 2,
+                    fillColor: '#ff0000',
+                    fillOpacity: 0.8
+                }).addTo(window.layerGroups.bound);
+
+                startMarker.bindTooltip('下游界限标起点', {
+                    permanent: true,
+                    direction: 'left',      // 显示在左侧
+                    offset: [-10, 0],       // 向左偏移10像素
+                    className: 'endpoint-tooltip'
+                });
+            }
+
+            // 绘制上下鸣笛标（点）
+            if (data.upWhistle) {
+                var polyline = L.polyline(data.upWhistle, {
+                    color: '#0000ff',
+                    weight: 4,
+                    opacity: 0.9
+                }).addTo(window.layerGroups.whistle);
+                // 为起点添加提示框（左侧）
+                var startPoint = data.upWhistle[0];
+                var startMarker = L.circleMarker(startPoint, {
+                    radius: 4,
+                    color: '#ff0000',
+                    weight: 2,
+                    fillColor: '#ff0000',
+                    fillOpacity: 0.8
+                }).addTo(window.layerGroups.whistle);
+
+                startMarker.bindTooltip('上鸣笛标标起点', {
+                    permanent: true,
+                    direction: 'left',      // 显示在左侧
+                    offset: [-10, 0],       // 向左偏移10像素
+                    className: 'endpoint-tooltip'
+                });
+            }
+
+            if (data.downWhistle) {
+                var polyline = L.polyline(data.downWhistle, {
+                    color: '#0000ff',
+                    weight: 4,
+                    opacity: 0.9
+                }).addTo(window.layerGroups.whistle);
+                // 为起点添加提示框（左侧）
+                var startPoint = data.downWhistle[0];
+                var startMarker = L.circleMarker(startPoint, {
+                    radius: 4,
+                    color: '#ff0000',
+                    weight: 2,
+                    fillColor: '#ff0000',
+                    fillOpacity: 0.8
+                }).addTo(window.layerGroups.whistle);
+
+                startMarker.bindTooltip('下鸣笛标标起点', {
+                    permanent: true,
+                    direction: 'left',      // 显示在左侧
+                    offset: [-10, 0],       // 向左偏移10像素
+                    className: 'endpoint-tooltip'
+                });
+            }
+            // 绘制上游计算范围到单独的图层
+            if (data.upCalcPolygon) {
+                upCalcLayer = L.polygon(data.upCalcPolygon, {
+                    color: '#00ff00',
+                    weight: 2,
+                    opacity: 0.7,
+                    fillColor: '#00ff00',
+                    fillOpacity: 0.2
+                }).addTo(window.layerGroups.calc);
+
+                upCalcLayer.bindTooltip('上游计算范围', {
+                    permanent: false,
+                    direction: 'center'
+                });
+            }
+
+            // 绘制下游计算范围到单独的图层
+            if (data.downCalcPolygon) {
+                downCalcLayer = L.polygon(data.downCalcPolygon, {
+                    color: '#ff00ff',
+                    weight: 2,
+                    opacity: 0.7,
+                    fillColor: '#ff00ff',
+                    fillOpacity: 0.2
+                }).addTo(window.layerGroups.calc);
+
+                downCalcLayer.bindTooltip('下游计算范围', {
+                    permanent: false,
+                    direction: 'center'
+                });
+            }
+            // 绘制停泊区
+            if (data.parkAreas && data.parkAreas.length > 0) {
+                data.parkAreas.forEach(function(area) {
+                    var polygon = L.polygon(area.points, styles.park)
+                        .addTo(window.layerGroups.park);
+                    polygon.bindTooltip('停泊区: ' + area.name, {permanent: false, direction: 'center'});
+
+                    // 添加名称标签
+                    var center = getPolygonCenter(area.points);
+                    if (center) {
+                        L.marker(center, {
+                            icon: L.divIcon({
+                                className: 'fence-label',
+                                html: '<div style="background-color: rgba(51,136,255,0.7); color: white; padding: 2px 5px; border-radius: 3px; font-size: 11px;">' + area.name + '</div>',
+                                iconSize: [60, 18],
+                                iconAnchor: [30, 9]
+                            })
+                        }).addTo(window.layerGroups.park);
+                    }
+                });
+            }
+
+            // 绘制特殊区
+            if (data.specialAreas && data.specialAreas.length > 0) {
+                data.specialAreas.forEach(function(area) {
+                    var polygon = L.polygon(area.points, styles.special)
+                        .addTo(window.layerGroups.special);
+                    polygon.bindTooltip('特殊区: ' + area.name, {permanent: false, direction: 'center'});
+
+                    // 添加名称标签
+                    var center = getPolygonCenter(area.points);
+                    if (center) {
+                        L.marker(center, {
+                            icon: L.divIcon({
+                                className: 'fence-label',
+                                html: '<div style="background-color: rgba(255,102,51,0.7); color: white; padding: 2px 5px; border-radius: 3px; font-size: 11px;">' + area.name + '</div>',
+                                iconSize: [60, 18],
+                                iconAnchor: [30, 9]
+                            })
+                        }).addTo(window.layerGroups.special);
+                    }
+                });
+            }
+
+            // 根据复选框状态设置初始显示
+            document.getElementById('showCalc').checked = false;
+            toggleCalcLayer('calc', false)
+
+            document.getElementById('showParkAreas').checked = false;
+            toggleCalcLayer('park',false)
+
+            document.getElementById('showSpecialAreas').checked = false;
+            toggleCalcLayer('special',false)
+
+
+        }
+
+        // 辅助函数：计算多边形中心
+        function getPolygonCenter(points) {
+            if (!points || points.length === 0) return null;
+            var lat = 0, lon = 0;
+            points.forEach(function(p) {{
+                lat += p[0];
+                lon += p[1];
+            }});
+            return [lat/points.length, lon/points.length];
+        }
+
+        // 切换计算范围显示的函数
+        function toggleCalcLayer(type, show) {
+            if (!window.layerGroups) return;
+
+            if (type === 'calc') {
+                if (show) {
+                    window.layerGroups.calc.addTo(map);
+                    console.log('显示上游计算范围');
+                } else {
+                    map.removeLayer(window.layerGroups.calc);
+                    console.log('隐藏上游计算范围');
+                }
+            }
+            else if(type === 'park' || type === 'special') {
+                // 停泊区和特殊区是整体控制
+                if (show) {
+                    window.layerGroups[type].addTo(map);
+                } else {
+                    map.removeLayer(window.layerGroups[type]);
+                }
+            }
+
+        }
+
+        // 初始化复选框状态
+        function initCheckboxes() {
+            // 设置复选框事件监听
+            document.getElementById('showCalc').addEventListener('change', function(e) {
+                toggleCalcLayer('up', e.target.checked);
+            });
+
+            document.getElementById('showParkAreas').addEventListener('change', function(e) {
+                toggleCalcLayer('park', e.target.checked);
+            });
+
+            document.getElementById('showSpecialAreas').addEventListener('change', function(e) {
+                toggleCalcLayer('special', e.target.checked);
             });
         }
 
-        // 绘制特殊区
-        if (data.specialAreas && data.specialAreas.length > 0) {
-            data.specialAreas.forEach(function(area) {
-                var polygon = L.polygon(area.points, styles.special)
-                    .addTo(window.layerGroups.special);
-                polygon.bindTooltip('特殊区: ' + area.name, {permanent: false, direction: 'center'});
 
-                // 添加名称标签
-                var center = getPolygonCenter(area.points);
-                if (center) {
-                    L.marker(center, {
-                        icon: L.divIcon({
-                            className: 'fence-label',
-                            html: '<div style="background-color: rgba(255,102,51,0.7); color: white; padding: 2px 5px; border-radius: 3px; font-size: 11px;">' + area.name + '</div>',
-                            iconSize: [60, 18],
-                            iconAnchor: [30, 9]
-                        })
-                    }).addTo(window.layerGroups.special);
-                }
-            });
-        }
+        // 定义船舶类型配置
+        const SHIP_TYPE_CONFIG = {
+            'upstream': {
+                name: '上水船舶',
+                color: 'blue',
+            },
+            'downstream': {
+                name: '下水船舶',
+                color: 'red',
+            },
+            'docked': {
+                name: '停靠船舶',
+                color: 'black',
 
-    // 根据复选框状态设置初始显示
-    document.getElementById('showUpCalc').checked = false;
-}
+            },
+            'special': {
+                name: '特殊船舶',
+                color: 'yellow',
 
-// 辅助函数：计算多边形中心
-    function getPolygonCenter(points) {
-        if (!points || points.length === 0) return null;
-        var lat = 0, lon = 0;
-        points.forEach(function(p) {{
-            lat += p[0];
-            lon += p[1];
-        }});
-        return [lat/points.length, lon/points.length];
-    }
-
-// 切换计算范围显示的函数
-function toggleCalcLayer(type, show) {
-     if (!window.layerGroups) return;
-
-    if (type === 'calc') {
-        if (show) {
-            window.layerGroups.calc.addTo(map);
-            console.log('显示上游计算范围');
-        } else {
-            map.removeLayer(window.layerGroups.calc);
-            console.log('隐藏上游计算范围');
-        }
-    }
-    else if(type === 'park' || type === 'special') {
-        // 停泊区和特殊区是整体控制
-        if (show) {
-            window.layerGroups[type].addTo(map);
-        } else {
-            map.removeLayer(window.layerGroups[type]);
-        }
-    }
-
-}
-
-// 初始化复选框状态
-function initCheckboxes() {
-    // 设置复选框事件监听
-    document.getElementById('showUpCalc').addEventListener('change', function(e) {
-        toggleCalcLayer('up', e.target.checked);
-    });
-
-     document.getElementById('showParkAreas').addEventListener('change', function(e) {
-        toggleCalcLayer('park', e.target.checked);
-    });
-
-    document.getElementById('showSpecialAreas').addEventListener('change', function(e) {
-        toggleCalcLayer('special', e.target.checked);
-    });
-}
+            }
+        };
 
 
-// 定义船舶类型配置
-const SHIP_TYPE_CONFIG = {
-    'upstream': {
-        name: '上水船舶',
-        color: 'blue',
-    },
-    'downstream': {
-        name: '下水船舶',
-        color: 'red',
-    },
-    'docked': {
-        name: '停靠船舶',
-        color: 'black',
+        // 保存船舶更改
+        function saveShipChanges(shipId) {
+            // 获取当前打开的popup
+            const popup = document.querySelector('.leaflet-popup-content');
+            if (!popup) return;
 
-    },
-    'special': {
-        name: '特殊船舶',
-        color: 'yellow',
+            // 获取表单数据
+            const name = popup.querySelector('#ship-name').value;
+            const type = popup.querySelector('#ship-type').value;
+            const speed = parseFloat(popup.querySelector('#ship-speed').value) || 0;
 
-    }
-};
+            // 找到对应的marker（这里需要根据你的存储方式查找）
+            const marker = findMarkerById(shipId); // 需要实现这个函数
 
-// 编辑船舶信息（双击）
-function editShipInfo(marker) {
-    const shipData = marker.options.shipData;
+            if (marker) {
+                // 更新marker数据
+                const shipData = marker.options.shipData;
+                shipData.name = name;
+                shipData.type = type;
+                shipData.speed = speed;
 
-    const editForm = `
-        <div class="ship-edit-form">
-            <h3 style="margin-top:0; color:#2c3e50;">编辑船舶信息</h3>
-            <form id="ship-edit-form-${shipData.MMSI || Date.now()}">
-                <div class="form-group">
-                    <label for="ship-name">船舶名称:</label>
-                    <input type="text" id="ship-name" value="${shipData.name || ''}"
-                           class="form-input" placeholder="输入船舶名称" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="ship-type">船舶类型:</label>
-                    <select id="ship-type" class="form-select">
-                        ${Object.entries(SHIP_TYPE_CONFIG).map(([key, config]) => `
-                            <option value="${key}" ${shipData.type === key ? 'selected' : ''}>
-                                ${config.name}
-                            </option>
-                        `).join('')}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="ship-speed">航速(节):</label>
-                    <input type="number" id="ship-speed" value="${shipData.speed || 0}"
-                           class="form-input" step="0.1" min="0">
-                </div>
-
-                <div class="form-group">
-                    <label for="ship-heading">航向角(°):</label>
-                    <input type="number" id="ship-heading" value="${shipData.heading || 0}"
-                           class="form-input" min="0" max="360">
-                </div>
-
-                <div class="form-group">
-                    <label for="ship-destination">目的地:</label>
-                    <input type="text" id="ship-destination" value="${shipData.destination || ''}"
-                           class="form-input" placeholder="输入目的地">
-                </div>
-
-                <div class="form-group">
-                    <label>当前位置:</label>
-                    <div style="font-size:12px; color:#666;">
-                        纬度: ${shipData.lat.toFixed(6)}<br>
-                        经度: ${shipData.lng.toFixed(6)}
-                    </div>
-                </div>
-
-                <div class="form-buttons">
-                    <button type="button" class="btn-save" onclick="saveShipChanges('${shipData.MMSI}')">
-                        保存更改
-                    </button>
-                    <button type="button" class="btn-cancel" onclick="cancelEdit()">
-                        取消
-                    </button>
-                </div>
-            </form>
-        </div>
-    `;
-
-    marker.bindPopup(editForm, {
-        maxWidth: 350,
-        minWidth: 300,
-        className: 'ship-edit-popup-container'
-    }).openPopup();
-}
-
-// 保存船舶更改
-function saveShipChanges(shipId) {
-    // 获取当前打开的popup
-    const popup = document.querySelector('.leaflet-popup-content');
-    if (!popup) return;
-
-    // 获取表单数据
-    const name = popup.querySelector('#ship-name').value;
-    const type = popup.querySelector('#ship-type').value;
-    const speed = parseFloat(popup.querySelector('#ship-speed').value) || 0;
-
-    // 找到对应的marker（这里需要根据你的存储方式查找）
-    const marker = findMarkerById(shipId); // 需要实现这个函数
-
-    if (marker) {
-        // 更新marker数据
-        const shipData = marker.options.shipData;
-        shipData.name = name;
-        shipData.type = type;
-        shipData.speed = speed;
-
-        // 更新图标颜色
-        const typeConfig = SHIP_TYPE_CONFIG[type];
-        if (typeConfig) {
-            const icon = marker.getIcon();
-            const newIconHtml = `
+                // 更新图标颜色
+                const typeConfig = SHIP_TYPE_CONFIG[type];
+                if (typeConfig) {
+                    const icon = marker.getIcon();
+                    const newIconHtml = `
                 <svg width="30" height="30" viewBox="0 0 30 30">
                     <polygon
                         points="15,0 30,30 0,30"
@@ -599,193 +555,179 @@ function saveShipChanges(shipId) {
                 </svg>
             `;
 
-            icon.options.html = newIconHtml;
-            marker.setIcon(icon);
+                    icon.options.html = newIconHtml;
+                    marker.setIcon(icon);
+                }
+
+                // 关闭popup并显示成功消息
+                marker.closePopup();
+
+                // 可以重新打开信息popup显示更新后的信息
+                setTimeout(() => {
+                    showShipInfoPopup(marker);
+
+                    // 显示保存成功提示
+                    L.popup()
+                        .setLatLng(marker.getLatLng())
+                        .setContent('<div style="color:green; padding:5px;">✓ 保存成功</div>')
+                        .openOn(map);
+
+                    setTimeout(() => {
+                        map.closePopup();
+                    }, 1500);
+                }, 300);
+
+                console.log('船舶信息已更新:', shipData);
+
+                // 触发自定义事件（可选）
+                if (window.onShipUpdated) {
+                    window.onShipUpdated(shipData);
+                }
+            }
         }
 
-        // 关闭popup并显示成功消息
-        marker.closePopup();
-
-        // 可以重新打开信息popup显示更新后的信息
-        setTimeout(() => {
-            showShipInfoPopup(marker);
-
-            // 显示保存成功提示
-            L.popup()
-                .setLatLng(marker.getLatLng())
-                .setContent('<div style="color:green; padding:5px;">✓ 保存成功</div>')
-                .openOn(map);
-
-            setTimeout(() => {
-                map.closePopup();
-            }, 1500);
-        }, 300);
-
-        console.log('船舶信息已更新:', shipData);
-
-        // 触发自定义事件（可选）
-        if (window.onShipUpdated) {
-            window.onShipUpdated(shipData);
+        // 移除船舶
+        window.removeShip = function(ship) {
+            if (shipMarkers[ship.MMSI]) {
+                map.removeLayer(shipMarkers[ship.MMSI]);
+                delete shipMarkers[ship.MMSI];
+            }
         }
-    }
-}
-
-// 移除船舶
-window.removeShip = function(ship) {
-    if (shipMarkers[ship.MMSI]) {
-        map.removeLayer(shipMarkers[ship.MMSI]);
-        delete shipMarkers[ship.MMSI];
-    }
-}
 
 
 
-// 存储当前选中的标记
-let currentSelectedMarker = null;
-// 存储每个标记的单击定时器
-let clickTimers = {};
-var isDblClick = false;
+        // 存储当前选中的标记
+        let currentSelectedMarker = null;
+        // 存储每个标记的单击定时器
+        let clickTimers = {};
+        var isDblClick = false;
 
-// 创建三角形标记
-function createTriangleMarker(ship) {
-    var color;
-    if (ship.direction === 'up') {
-        color = 'blue'
-    } else if (ship.direction === 'down') {
-        color = 'red'
-    } else if (ship.direction === 'docked') {
-        color = 'black'
-    } else {
-        color = 'yellow'
-    }
-    // 创建自定义图标
-    const icon = L.divIcon({
-        className: 'ship-marker',
-        html: createTriangleHTML(ship.heading, color),
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2]
-    });
-    console.log("创建自定义船标")
-    // 创建标记
-    const marker = L.marker([ship.latitude, ship.longitude], {
-        icon: icon,
-        title: ship.name,
-        // rotationAngle: ship.heading,
-        shipData: ship,
-        MMSI: ship.MMSI // 直接存储MMSI方便查找
-    });
+        // 创建三角形标记
+        function createTriangleMarker(ship) {
 
-    // 绑定事件
-    bindMarkerEvents(marker);
+            // 创建自定义图标
+            const icon = L.divIcon({
+                className: 'ship-marker',
+                html: createTriangleHTML(ship),
+                iconSize: [size, size],
+                iconAnchor: [size / 2, size / 2]
+            });
+            console.log("创建自定义船标")
+            // 创建标记
+            const marker = L.marker([ship.latitude, ship.longitude], {
+                icon: icon,
+                title: ship.name,
+                // rotationAngle: ship.heading,
+                shipData: ship,
+                MMSI: ship.MMSI // 直接存储MMSI方便查找
+            });
 
-     // 绑定提示框
-    const tooltipContent = `
+            // 绑定事件
+            bindMarkerEvents(marker);
+
+            // 绑定提示框
+            const tooltipContent = `
                 <div style="text-align: center;">
                     <strong>${ship.name}</strong><br>
                 </div>
             `;
 
-    marker.bindTooltip(tooltipContent, {
-        permanent: true,
-        direction: 'right',
-        offset: [10, 0],
-        className: 'ship-tooltip'
-    });
+            marker.bindTooltip(tooltipContent, {
+                permanent: true,
+                direction: 'right',
+                offset: [10, 0],
+                className: 'ship-tooltip'
+            });
 
 
-    console.log("创建船标并绑定事件");
-    return marker;
-}
-
-// 统一的事件绑定函数 - 简化版，只有单击
-function bindMarkerEvents(marker) {
-    const mmsi = marker.options.MMSI;
-
-    // 先解绑所有事件，避免重复绑定
-    marker.off('click');
-    marker.off('dblclick');
-    marker.off('contextmenu');
-
-    console.log(`绑定单击事件 for 船舶 ${mmsi}`);
-
-    // 单击事件 - 显示船舶信息面板
-    marker.on('click', function(e) {
-        console.log("单击事件触发", mmsi);
-
-        // 防抖处理：如果快速点击，只执行最后一次
-        if (clickTimers[mmsi]) {
-            clearTimeout(clickTimers[mmsi]);
+            console.log("创建船标并绑定事件");
+            return marker;
         }
 
-        clickTimers[mmsi] = setTimeout(() => {
-            console.log("执行单击操作", mmsi);
+        // 统一的事件绑定函数 - 简化版，只有单击
+        function bindMarkerEvents(marker) {
+            const mmsi = marker.options.MMSI;
 
-            // 清除之前选中的标记样式
-            if (window.currentSelectedMarker && window.currentSelectedMarker !== marker) {
-                // 可以在这里恢复之前的样式
-            }
+            // 先解绑所有事件，避免重复绑定
+            marker.off('click');
+            marker.off('dblclick');
+            marker.off('contextmenu');
 
-            window.currentSelectedMarker = marker;
+            console.log(`绑定单击事件 for 船舶 ${mmsi}`);
 
-            // 关闭可能存在的弹出框
-            marker.closePopup();
+            // 单击事件 - 显示船舶信息面板
+            marker.on('click', function(e) {
+                console.log("单击事件触发", mmsi);
 
-            // 显示船舶信息面板
-            setTimeout(() => {
-                showShipInfoPanel(marker);
-            }, 50);
+                // 防抖处理：如果快速点击，只执行最后一次
+                if (clickTimers[mmsi]) {
+                    clearTimeout(clickTimers[mmsi]);
+                }
 
-            // 清除定时器
-            delete clickTimers[mmsi];
-        }, 200); // 200ms防抖
+                clickTimers[mmsi] = setTimeout(() => {
+                    console.log("执行单击操作", mmsi);
 
-        // 阻止事件冒泡
-        L.DomEvent.stopPropagation(e);
-    });
+                    window.currentSelectedMarker = marker;
 
-    // 鼠标悬停事件 - 可以用于高亮显示
-    marker.on('mouseover', function(e) {
-        // 可选：放大图标或改变样式
-        // console.log("鼠标悬停", mmsi);
-    });
+                    // 关闭可能存在的弹出框
+                    marker.closePopup();
 
-    // 鼠标离开事件
-    marker.on('mouseout', function(e) {
-        // 恢复样式
-    });
-}
+                    // 显示船舶信息面板
+                    setTimeout(() => {
+                        showShipInfoPanel(marker);
+                    }, 50);
 
-// 右键菜单事件 - 可以单独绑定，如果不需要可以注释掉
-function bindContextMenuEvent(marker) {
-    const mmsi = marker.options.MMSI;
+                    // 清除定时器
+                    delete clickTimers[mmsi];
+                }, 200); // 200ms防抖
 
-    marker.on('contextmenu', function(e) {
-        console.log("右键菜单事件触发", mmsi);
+                // 阻止事件冒泡
+                L.DomEvent.stopPropagation(e);
+            });
+
+            // 鼠标悬停事件 - 可以用于高亮显示
+            marker.on('mouseover', function(e) {
+                // 可选：放大图标或改变样式
+                // console.log("鼠标悬停", mmsi);
+            });
+
+            // 鼠标离开事件
+            marker.on('mouseout', function(e) {
+                // 恢复样式
+            });
+        }
+
+        // 右键菜单事件 - 可以单独绑定，如果不需要可以注释掉
+        function bindContextMenuEvent(marker) {
+            const mmsi = marker.options.MMSI;
+
+            marker.on('contextmenu', function(e) {
+                console.log("右键菜单事件触发", mmsi);
+
+                // 显示自定义右键菜单
+                showCustomContextMenu(e, marker);
+
+                // 阻止默认右键菜单
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+            });
+        }
 
         // 显示自定义右键菜单
-        showCustomContextMenu(e, marker);
+        function showCustomContextMenu(e, marker) {
+            const ship = marker.options.shipData;
+            if (!ship) return;
 
-        // 阻止默认右键菜单
-        L.DomEvent.stopPropagation(e);
-        L.DomEvent.preventDefault(e);
-    });
-}
+            // 移除已存在的自定义菜单
+            const existingMenu = document.getElementById('custom-context-menu');
+            if (existingMenu) {
+                existingMenu.remove();
+            }
 
-// 显示自定义右键菜单
-function showCustomContextMenu(e, marker) {
-    const ship = marker.options.shipData;
-    if (!ship) return;
-
-    // 移除已存在的自定义菜单
-    const existingMenu = document.getElementById('custom-context-menu');
-    if (existingMenu) {
-        existingMenu.remove();
-    }
-
-    // 创建自定义菜单
-    const menu = document.createElement('div');
-    menu.id = 'custom-context-menu';
-    menu.style.cssText = `
+            // 创建自定义菜单
+            const menu = document.createElement('div');
+            menu.id = 'custom-context-menu';
+            menu.style.cssText = `
         position: absolute;
         left: ${e.containerPoint.x}px;
         top: ${e.containerPoint.y}px;
@@ -797,9 +739,9 @@ function showCustomContextMenu(e, marker) {
         font-family: 'Microsoft YaHei', sans-serif;
     `;
 
-    // 添加菜单项样式
-    const style = document.createElement('style');
-    style.textContent = `
+            // 添加菜单项样式
+            const style = document.createElement('style');
+            style.textContent = `
         .context-menu-item {
             padding: 8px 12px;
             cursor: pointer;
@@ -809,9 +751,9 @@ function showCustomContextMenu(e, marker) {
             background: #f0f0f0;
         }
     `;
-    document.head.appendChild(style);
+            document.head.appendChild(style);
 
-    menu.innerHTML = `
+            menu.innerHTML = `
         <div style="padding: 8px 12px; border-bottom: 1px solid #eee; font-weight: bold; background: #f8f9fa;">
             ${ship.name} (${ship.MMSI})
         </div>
@@ -830,80 +772,94 @@ function showCustomContextMenu(e, marker) {
         </div>
     `;
 
-    document.body.appendChild(menu);
+            document.body.appendChild(menu);
 
-    // 点击其他地方关闭菜单
-    setTimeout(() => {
-        document.addEventListener('click', function closeMenu() {
-            const menu = document.getElementById('custom-context-menu');
-            if (menu) {
-                menu.remove();
-            }
-            document.removeEventListener('click', closeMenu);
-        });
-    }, 100);
-}
-
-// 右键菜单项对应的函数
-function showShipInfoPanelFromMenu(mmsi) {
-    const marker = shipMarkers[mmsi];
-    if (marker) {
-        showShipInfoPanel(marker);
-    }
-    document.getElementById('custom-context-menu')?.remove();
-}
-
-function centerToShip(mmsi) {
-    const marker = shipMarkers[mmsi];
-    if (marker && map) {
-        const latLng = marker.getLatLng();
-        map.setView(latLng, Math.max(map.getZoom(), 15));
-        console.log(`居中显示船舶 ${mmsi}`);
-    }
-    document.getElementById('custom-context-menu')?.remove();
-}
-
-function addToWatchList(mmsi) {
-    console.log(`添加船舶 ${mmsi} 到关注列表`);
-    alert(`船舶 ${mmsi} 已添加到关注列表`);
-    document.getElementById('custom-context-menu')?.remove();
-}
-
-function removeShipFromMap(mmsi) {
-    if (confirm(`确定要移除船舶 ${mmsi} 的标记吗？`)) {
-        const marker = shipMarkers[mmsi];
-        if (marker) {
-            shipLayerGroup.removeLayer(marker);
-            delete shipMarkers[mmsi];
-            console.log(`已移除船舶 ${mmsi}`);
+            // 点击其他地方关闭菜单
+            setTimeout(() => {
+                document.addEventListener('click', function closeMenu() {
+                    const menu = document.getElementById('custom-context-menu');
+                    if (menu) {
+                        menu.remove();
+                    }
+                    document.removeEventListener('click', closeMenu);
+                });
+            }, 100);
         }
-    }
-    document.getElementById('custom-context-menu')?.remove();
-}
+
+        // 右键菜单项对应的函数
+        function showShipInfoPanelFromMenu(mmsi) {
+            const marker = shipMarkers[mmsi];
+            if (marker) {
+                showShipInfoPanel(marker);
+            }
+            document.getElementById('custom-context-menu')?.remove();
+        }
+
+        function centerToShip(mmsi) {
+            const marker = shipMarkers[mmsi];
+            if (marker && map) {
+                const latLng = marker.getLatLng();
+                map.setView(latLng, Math.max(map.getZoom(), 15));
+                console.log(`居中显示船舶 ${mmsi}`);
+            }
+            document.getElementById('custom-context-menu')?.remove();
+        }
+
+        function addToWatchList(mmsi) {
+            console.log(`添加船舶 ${mmsi} 到关注列表`);
+            alert(`船舶 ${mmsi} 已添加到关注列表`);
+            document.getElementById('custom-context-menu')?.remove();
+        }
+
+        function removeShipFromMap(mmsi) {
+            if (confirm(`确定要移除船舶 ${mmsi} 的标记吗？`)) {
+                const marker = shipMarkers[mmsi];
+                if (marker) {
+                    shipLayerGroup.removeLayer(marker);
+                    delete shipMarkers[mmsi];
+                    console.log(`已移除船舶 ${mmsi}`);
+                }
+            }
+            document.getElementById('custom-context-menu')?.remove();
+        }
 
 
 
-const size = 30
+        const size = 30
 
-// 创建三角形HTML,指定颜色
-function createTriangleHTML(heading, color) {
-    // 确保heading是有效数字
-    const rotateAngle = heading || 0;
+        // 创建三角形HTML
+        function createTriangleHTML(ship) {
+            var color;
+            if (ship.status === 'up') {
+                color = 'blue'
+            } else if (ship.status === 'down') {
+                color = 'red'
+            } else if (ship.status === 'docked') {
+                color = 'black'
+            } else if(ship.status === 'special'){
+                color = 'pink'
+            }
+            else {
+                color = 'yellow'
+            }
 
-    // 动态计算基于size的坐标
-    const center = size / 2;                    // 中心点
-    const tipY = size * 0.3;                    // 顶点Y坐标 (15%处)
-    const baseY = size * 0.85;                    // 底部Y坐标 (85%处)
-    const baseWidth = size * 0.7;                  // 底部宽度为80%的size
-    const leftX = center - baseWidth / 2;          // 左下角X
-    const rightX = center + baseWidth / 2;         // 右下角X
+            // 确保heading是有效数字
+            const rotateAngle = ship.heading || 0;
 
-    // 指示线参数
-    const lineStartY = tipY;                        // 指示线起点Y
-    const lineEndY = tipY - size * 0.4;             // 指示线终点Y (向上延伸25% size)
-    const dotY = lineEndY - size * 0.05;              // 小圆点Y
+            // 动态计算基于size的坐标
+            const center = size / 2;                    // 中心点
+            const tipY = size * 0.3;                    // 顶点Y坐标 (15%处)
+            const baseY = size * 0.85;                    // 底部Y坐标 (85%处)
+            const baseWidth = size * 0.7;                  // 底部宽度为80%的size
+            const leftX = center - baseWidth / 2;          // 左下角X
+            const rightX = center + baseWidth / 2;         // 右下角X
 
-    return `
+            // 指示线参数
+            const lineStartY = tipY;                        // 指示线起点Y
+            const lineEndY = tipY - size * 0.4;             // 指示线终点Y (向上延伸25% size)
+            const dotY = lineEndY - size * 0.05;              // 小圆点Y
+
+            return `
         <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"
              style="transform: rotate(${rotateAngle}deg); transform-origin: center center;">
             <!-- 等腰三角形 -->
@@ -930,63 +886,165 @@ function createTriangleHTML(heading, color) {
             />
         </svg>
     `;
-}
+        }
 
-// 添加船舶标记
-window.updateShipMarker = function updateShipMarker(ship) {
-    console.log("添加船舶标记")
-    // 如果船舶已存在，更新位置
-    if (shipMarkers[ship.MMSI]) {
-        // 更新现有标记
-        var marker = shipMarkers[ship.MMSI];
-        marker.setLatLng([ship.latitude, ship.longitude]);
-// 更新 shipData
-        marker.options.shipData = ship;
-        // marker.options.rotationAngle=ship.heading
-        // 创建新图标
+        // 获取船舶对应的图层组
+        function getShipLayerGroup(ship) {
+            // 根据船舶类型返回不同的图层组
+            if (ship.status === 'docked' || ship.shipType === 'docked') {
+                return window.dockedShipLayerGroup
+            } else if (ship.status === 'special' || ship.shipType === 'special') {
+                return window.specialShipLayerGroup
+            } else if (ship.status === 'warning' || ship.shipType === 'warning') {
+                return window.warningShipLayerGroup
+            } else {
+                return shipLayerGroup;
+            }
+        }
 
-        // 创建自定义图标
-        const icon = L.divIcon({
-            className: 'ship-marker',
-            html: createTriangleHTML(ship.heading, "blue"),
-            iconSize: [size, size],
-            iconAnchor: [size / 2, size / 2]
-        });
-        marker.setIcon(icon);
+        // 切换特定类型船舶的显示
+        function toggleShipType(type, show) {
+            const layerGroup = getLayerGroupByType(type);
 
-  const tooltipContent = `
+            if (show) {
+                layerGroup.addTo(map);
+            } else {
+                map.removeLayer(layerGroup);
+            }
+
+            console.log(`切换船舶类型 ${type} 显示: ${show ? '显示' : '隐藏'}`);
+        }
+
+        // 获取不同类型船舶的图层组
+        function getLayerGroupByType(type) {
+            switch(type) {
+                case 'docked':
+                    return window.dockedShipLayerGroup;
+                case 'special':
+                    return window.specialShipLayerGroup;
+                case 'warning':
+                    return window.warningShipLayerGroup;
+                default:
+                    return shipLayerGroup;
+            }
+        }
+
+        // 初始化所有船舶图层组
+        function initShipLayerGroups() {
+            if (!window.shipLayerGroup) {
+                window.shipLayerGroup = L.layerGroup().addTo(map);
+            }
+            if (!window.dockedShipLayerGroup) {
+                window.dockedShipLayerGroup = L.layerGroup().addTo(map);
+            }
+            if (!window.specialShipLayerGroup) {
+                window.specialShipLayerGroup = L.layerGroup().addTo(map);
+            }
+            if (!window.warningShipLayerGroup) {
+                window.warningShipLayerGroup = L.layerGroup().addTo(map);
+            }
+        }
+
+        // 添加船舶标记
+        window.updateShipMarker = function updateShipMarker(ship) {
+
+            // 根据船舶类型确定所属图层组
+            const layerGroup = getShipLayerGroup(ship);
+
+
+            // 如果船舶已存在，更新位置
+            if (shipMarkers[ship.MMSI]) {
+                // 更新现有标记
+                var marker = shipMarkers[ship.MMSI];
+                marker.setLatLng([ship.latitude, ship.longitude]);
+                const oldship=marker.options.shipData
+                const oldstatus = marker.options.shipData.status;
+
+                // 判断船舶类型是否改变
+                const typeChanged = (oldstatus !== ship.status);
+
+                // 如果类型改变，需要移动图层
+                if (typeChanged) {
+                    // 从旧图层移除
+                    const oldLayerGroup = getShipLayerGroup(oldship);
+                    if (oldLayerGroup) {
+                        oldLayerGroup.removeLayer(marker);
+                    }
+
+                    // 添加到新图层
+                    marker.addTo(layerGroup);
+                }
+
+                // 更新 shipData
+                marker.options.shipData = ship;
+
+
+                // 创建自定义图标
+                const icon = L.divIcon({
+                    className: 'ship-marker',
+                    html: createTriangleHTML(ship),
+                    iconSize: [size, size],
+                    iconAnchor: [size / 2, size / 2]
+                });
+                marker.setIcon(icon);
+
+                const tooltipContent = `
             <div style="text-align: center;">
-                <strong>${ship.name}</strong><br>
-                <span style="font-size: 10px; color: #666;">${ship.MMSI}</span>
+                <strong>${ship.name}</strong>
             </div>
         `;
 
-        marker.setTooltipContent(tooltipContent);
+                marker.setTooltipContent(tooltipContent);
+
+                shipMarkers[ship.MMSI] = marker
+                console.log("船舶标记已更新", ship.MMSI);
+            }
+            // 否则创建新标记
+            else {
+                console.log("创建船舶标记")
+                var marker = createTriangleMarker(ship);
+                shipMarkers[ship.MMSI] = marker;
+
+                // 添加到对应图层组
+                marker.addTo(layerGroup);
+            }
+            updateShipCounts()
 
 
-        console.log("船舶标记已更新", ship.MMSI);
-    }
-    // 否则创建新标记
-    else {
-        console.log("创建船舶标记")
-        var marker = createTriangleMarker(ship);
-        shipMarkers[ship.MMSI] = marker;
-        marker.addTo(shipLayerGroup)
-    }
-}
 
+        }
+        function  updateShipCounts(){
+            let counts = {
+                docked: 0,
+                special: 0,
+            };
+            // 统计各类型船舶数量
+            Object.values(shipMarkers).forEach(marker => {
+                const type = marker.options.shipData.status;
+                if (counts.hasOwnProperty(type)) {
+                    counts[type]++;
+                }
+            });
 
-// 创建右上角信息面板
-function createInfoPanel() {
-    // 检查是否已存在，避免重复创建
-    if (document.getElementById('ship-info-panel')) {
-        return document.getElementById('ship-info-panel');
-    }
+            // 更新UI显示
+            const dockedCountSpan = document.getElementById('dockedShipsCount');
+            if (dockedCountSpan) dockedCountSpan.textContent = `(${counts.docked})`;
 
-    // 创建面板容器
-    const panel = document.createElement('div');
-    panel.id = 'ship-info-panel';
-    panel.style.cssText = `
+            const specialCountSpan = document.getElementById('specialShipsCount');
+            if (specialCountSpan) specialCountSpan.textContent = `(${counts.special})`;
+        }
+
+        // 创建右上角信息面板
+        function createInfoPanel() {
+            // 检查是否已存在，避免重复创建
+            if (document.getElementById('ship-info-panel')) {
+                return document.getElementById('ship-info-panel');
+            }
+
+            // 创建面板容器
+            const panel = document.createElement('div');
+            panel.id = 'ship-info-panel';
+            panel.style.cssText = `
         position: absolute;
         top: 20px;
         right: 20px;
@@ -1000,9 +1058,9 @@ function createInfoPanel() {
         overflow: hidden;
     `;
 
-    // 面板头部
-    const header = document.createElement('div');
-    header.style.cssText = `
+            // 面板头部
+            const header = document.createElement('div');
+            header.style.cssText = `
         background: #2c3e50;
         color: white;
         padding: 12px 15px;
@@ -1012,24 +1070,24 @@ function createInfoPanel() {
         justify-content: space-between;
         align-items: center;
     `;
-    header.innerHTML = `
+            header.innerHTML = `
         <span>船舶详细信息</span>
         <span style="cursor: pointer; font-size: 20px;" onclick="closeInfoPanel()">&times;</span>
     `;
 
-    // 面板内容
-    const content = document.createElement('div');
-    content.id = 'ship-info-content';
-    content.style.cssText = `
+            // 面板内容
+            const content = document.createElement('div');
+            content.id = 'ship-info-content';
+            content.style.cssText = `
         padding: 15px;
         max-height: 500px;
         overflow-y: auto;
     `;
 
-    // 按钮组
-    const buttonGroup = document.createElement('div');
-    buttonGroup.id = 'ship-info-buttons';
-    buttonGroup.style.cssText = `
+            // 按钮组
+            const buttonGroup = document.createElement('div');
+            buttonGroup.id = 'ship-info-buttons';
+            buttonGroup.style.cssText = `
         padding: 10px 15px;
         background: #f8f9fa;
         border-top: 1px solid #dee2e6;
@@ -1038,47 +1096,57 @@ function createInfoPanel() {
         flex-wrap: wrap;
     `;
 
-    panel.appendChild(header);
-    panel.appendChild(content);
-    panel.appendChild(buttonGroup);
-    document.body.appendChild(panel);
+            panel.appendChild(header);
+            panel.appendChild(content);
+            panel.appendChild(buttonGroup);
+            document.body.appendChild(panel);
 
-    return panel;
-}
+            return panel;
+        }
 
-// 关闭信息面板
-function closeInfoPanel() {
-    const panel = document.getElementById('ship-info-panel');
-    if (panel) {
-        panel.style.display = 'none';
-    }
-}
+        // 关闭信息面板
+        function closeInfoPanel() {
+            const panel = document.getElementById('ship-info-panel');
+            if (panel) {
+                panel.style.display = 'none';
+            }
+        }
 
-// 显示信息面板
-function showInfoPanel() {
-    const panel = document.getElementById('ship-info-panel');
-    if (panel) {
-        panel.style.display = 'block';
-    }
-}
+        // 显示信息面板
+        function showInfoPanel() {
+            const panel = document.getElementById('ship-info-panel');
+            if (panel) {
+                panel.style.display = 'block';
+            }
+        }
 
+        // 显示船舶信息面板
+        function showShipInfoPanel(marker) {
+            const ship = marker.options.shipData;
+            if (!ship) return;
 
+            // 确保面板存在
+            const panel = createInfoPanel();
+            const content = document.getElementById('ship-info-content');
+            const buttonGroup = document.getElementById('ship-info-buttons');
 
-// 显示船舶信息面板
-function showShipInfoPanel(marker) {
-    const ship = marker.options.shipData;
-    if (!ship) return;
+            const get_ststus_name =(status) =>{
+                switch (status) {
+                    case 'up':
+                        return '上水'
+                    case 'down':
+                        return '下水'
+                    case 'docked':
+                        return '停靠'
+                    case 'special':
+                        return '特殊'
+                    default:
+                        return '未知状态'
+                }
+            }
 
-    // 确保面板存在
-    const panel = createInfoPanel();
-    const content = document.getElementById('ship-info-content');
-    const buttonGroup = document.getElementById('ship-info-buttons');
-
-    // 格式化时间
-    const updateTime = ship.updateTime ? new Date(ship.updateTime).toLocaleString() : '未知';
-
-    // 填充内容
-    content.innerHTML = `
+            // 填充内容
+            content.innerHTML = `
         <div style="margin-bottom: 15px;">
             <div style="font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 5px;">
                 ${ship.name}
@@ -1106,22 +1174,22 @@ function showShipInfoPanel(marker) {
                 <td style="padding: 8px 5px; font-weight: 500;">${ship.heading || 0}°</td>
             </tr>
             <tr style="border-bottom: 1px solid #ecf0f1;">
-                <td style="padding: 8px 5px; color: #7f8c8d;">方向</td>
+                <td style="padding: 8px 5px; color: #7f8c8d;">船舶状态</td>
                 <td style="padding: 8px 5px; font-weight: 500;">
                     <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%;
                         background: red; margin-right: 5px;"></span>
-                    ${ship.direction || 'unknown'}
+                    ${get_ststus_name(ship.status)}
                 </td>
             </tr>
             <tr>
                 <td style="padding: 8px 5px; color: #7f8c8d;">更新时间</td>
-                <td style="padding: 8px 5px; font-size: 11px;">${updateTime}</td>
+                <td style="padding: 8px 5px; font-weight: 500;">${ship.last_update_time}</td>
             </tr>
         </table>
     `;
 
-    // 按钮组
-    buttonGroup.innerHTML = `
+            // 按钮组
+            buttonGroup.innerHTML = `
         <button onclick="editShipFromPanel('${ship.MMSI}')"
             style="flex:1; padding: 8px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">
             ✏️ 编辑
@@ -1136,29 +1204,29 @@ function showShipInfoPanel(marker) {
         </button>
     `;
 
-    // 显示面板
-    showInfoPanel();
-}
+            // 显示面板
+            showInfoPanel();
+        }
 
-// 从面板编辑船舶
-function editShipFromPanel(mmsi) {
-    const marker = shipMarkers[mmsi];
-    if (marker) {
-        closeInfoPanel();
-        showShipEditForm(marker);
-    }
-}
-// 显示船舶编辑表单
-function showShipEditForm(marker) {
-    const ship = marker.options.shipData;
-    if (!ship) return;
+        // 从面板编辑船舶
+        function editShipFromPanel(mmsi) {
+            const marker = shipMarkers[mmsi];
+            if (marker) {
+                closeInfoPanel();
+                showShipEditForm(marker);
+            }
+        }
+        // 显示船舶编辑表单
+        function showShipEditForm(marker) {
+            const ship = marker.options.shipData;
+            if (!ship) return;
 
-    console.log("显示编辑表单", ship.MMSI);
+            console.log("显示编辑表单", ship.MMSI);
 
-    // 创建模态框
-    const modal = document.createElement('div');
-    modal.id = 'ship-edit-modal';
-    modal.style.cssText = `
+            // 创建模态框
+            const modal = document.createElement('div');
+            modal.id = 'ship-edit-modal';
+            modal.style.cssText = `
         position: fixed;
         top: 0;
         left: 0;
@@ -1172,9 +1240,9 @@ function showShipEditForm(marker) {
         font-family: 'Microsoft YaHei', sans-serif;
     `;
 
-    // 创建表单内容
-    const content = document.createElement('div');
-    content.style.cssText = `
+            // 创建表单内容
+            const content = document.createElement('div');
+            content.style.cssText = `
         background: white;
         border-radius: 8px;
         width: 350px;
@@ -1182,45 +1250,46 @@ function showShipEditForm(marker) {
         box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     `;
 
-    // 当前状态对应的颜色
-    const getStatusText = (direction) => {
-        switch(direction) {
-            case 'up': return '上行';
-            case 'down': return '下行';
-            case 'docked': return '停泊';
-            default: return '未知';
-        }
-    };
+            // 当前状态对应的颜色
+            const getStatusText = (status) => {
+                switch(status) {
+                    case 'up': return '上行';
+                    case 'down': return '下行';
+                    case 'docked': return '停泊';
+                    default: return '未知';
+                }
+            };
 
-    content.innerHTML = `
+            content.innerHTML = `
         <h3 style="margin-top:0; margin-bottom:15px; color:#2c3e50; border-bottom:1px solid #eee; padding-bottom:10px;">
             编辑船舶信息
         </h3>
 
         <div style="margin-bottom:15px;">
-            <label style="display:block; margin-bottom:5px; color:#7f8c8d; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; color:#7f8c8d; font-size:18px;">
                 船舶名称
             </label>
             <input type="text" id="edit-ship-name" value="${ship.name || ''}"
-                style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box;">
+                style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box;font-size:18px;">
         </div>
 
         <div style="margin-bottom:20px;">
-            <label style="display:block; margin-bottom:5px; color:#7f8c8d; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; color:#7f8c8d; font-size:18px;">
                 上下水状态
             </label>
             <select id="edit-ship-direction"
-                style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; background:white;">
-                <option value="up" ${ship.direction === 'up' ? 'selected' : ''}>上行</option>
-                <option value="down" ${ship.direction === 'down' ? 'selected' : ''}>下行</option>
-                <option value="docked" ${ship.direction === 'docked' ? 'selected' : ''}>停泊</option>
-                <option value="unknown" ${ship.direction === 'unknown' ? 'selected' : ''}>未知</option>
+                style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; background:white;font-size:18px;">
+                <option value="up" ${ship.status === 'up' ? 'selected' : ''}>上行</option>
+                <option value="down" ${ship.status === 'down' ? 'selected' : ''}>下行</option>
+                <option value="docked" ${ship.status === 'docked' ? 'selected' : ''}>停泊</option>
+                <option value="special" ${ship.status === 'special' ? 'selected' : ''}>特殊</option>
+                <option value="unknown" ${ship.status === 'unknown' ? 'selected' : ''}>未知</option>
             </select>
         </div>
 
-        <div style="background:#f8f9fa; padding:10px; border-radius:4px; margin-bottom:20px;">
-            <div style="font-size:12px; color:#7f8c8d; margin-bottom:5px;">当前信息：</div>
-            <div style="font-size:12px;">
+        <div style="background:#f8f9fa; padding:10px; border-radius:4px; margin-bottom:20px;font-size:18px;">
+            <div style=" color:#7f8c8d; margin-bottom:5px;">当前信息：</div>
+            <div ">
                 <div>MMSI: ${ship.MMSI}</div>
                 <div>当前位置: ${ship.latitude.toFixed(6)}, ${ship.longitude.toFixed(6)}</div>
                 <div>当前航向: ${ship.heading || 0}°</div>
@@ -1228,8 +1297,8 @@ function showShipEditForm(marker) {
             </div>
         </div>
 
-        <div style="display:flex; gap:10px;">
-            <button onclick="saveShipChanges('${ship.MMSI}')"
+        <div style="display:flex; gap:10px;font-size:18px;">
+            <button onclick="saveShipChanges('${ship.MMSI}',)"
                 style="flex:2; padding:10px; background:#27ae60; color:white; border:none; border-radius:4px; cursor:pointer;">
                 保存修改
             </button>
@@ -1240,104 +1309,102 @@ function showShipEditForm(marker) {
         </div>
     `;
 
-    modal.appendChild(content);
-    document.body.appendChild(modal);
+            modal.appendChild(content);
+            document.body.appendChild(modal);
 
-    // 点击模态框背景关闭
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.remove();
+            // 点击模态框背景关闭
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
         }
-    });
-}
 
-// 保存船舶修改
+        // 保存船舶修改
 window.saveShipChanges = function(mmsi) {
     const marker = shipMarkers[mmsi];
     if (!marker) {
+        console.error(`船舶 ${mmsi} 不存在`);
         alert('船舶标记不存在');
         return;
     }
 
     const ship = marker.options.shipData;
     const newName = document.getElementById('edit-ship-name').value.trim();
-    const newDirection = document.getElementById('edit-ship-direction').value;
+    const newStatus = document.getElementById('edit-ship-direction').value;
 
     if (!newName) {
         alert('请输入船舶名称');
         return;
     }
 
-    // 更新 shipData
-    ship.name = newName;
-    ship.direction = newDirection;
+    // 记录修改前的状态
+    const oldStatus = ship.status;
+    const oldName = ship.name;
 
-    // 根据新方向选择颜色
-    let color;
-    switch(newDirection) {
-        case 'up':
-            color = '#3498db';  // 蓝色
-            break;
-        case 'down':
-            color = '#e74c3c';  // 红色
-            break;
-        case 'docked':
-            color = '#2c3e50';  // 黑色
-            break;
-        default:
-            color = '#f1c40f';  // 黄色
+    // 更新本地 shipData
+    ship.name = newName;
+    ship.status = newStatus;
+
+    // 根据新状态更新方向字段（用于图标显示）
+    if (newStatus === 'up') {
+        ship.status = 'up';
+    } else if (newStatus === 'down') {
+        ship.status = 'down';
+    } else if (newStatus === 'docked') {
+        ship.status = 'docked';
+    } else if (newStatus === 'special') {
+        ship.status = 'special';
+    } else {
+        ship.status = 'unknown';
     }
 
-    // 更新图标
-    const icon = L.divIcon({
-        className: 'ship-marker',
-        html: createTriangleHTML(ship.heading, color),
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2]
-    });
-    marker.setIcon(icon);
+   updateShipMarker(ship)
 
 
-    const tooltipContent = `
-            <div style="text-align: center;">
-                <strong>${ship.name}</strong><br>
-                <span style="font-size: 10px; color: #666;">${ship.MMSI}</span>
-            </div>
-        `;
+    console.log(`船舶信息已更新: ${mmsi}, 新名称: ${newName}, 新状态: ${newStatus}`);
 
-        marker.setTooltipContent(tooltipContent);
-
-    // 更新 shipData
-    marker.options.shipData = ship;
-
-    console.log(`船舶信息已更新: ${mmsi}, 新名称: ${newName}, 新方向: ${newDirection}`);
-
-    // 关闭模态框
+    // 关闭编辑模态框
     closeEditModal();
 
-    // 可选：发送更新到后端
-    if (window.onShipDataChanged) {
-        window.onShipDataChanged(ship);
-    }
-
     // 显示成功提示
-    showNotification('船舶信息已更新', 'success');
-}
+    showNotification(`船舶 ${newName} 信息已更新`, 'success');
 
-// 关闭编辑模态框
-function closeEditModal() {
-    const modal = document.getElementById('ship-edit-modal');
-    if (modal) {
-        modal.remove();
+    // 发送更新信息到主函数（Python）
+    if (window.onShipDataChanged) {
+        // 构建更新数据
+        const updateData = {
+            MMSI: ship.MMSI,
+            name: newName,
+            status: newStatus,
+            oldStatus: oldStatus,
+            oldName: oldName,
+            latitude: ship.latitude,
+            longitude: ship.longitude,
+            heading: ship.heading,
+            speed: ship.speed,
+            updateTime: ship.updateTime
+        };
+
+        console.log('通知主函数船舶信息已修改:', updateData);
+        window.onShipDataChanged(JSON.stringify(updateData));
     }
-}
+};
+
+        // 关闭编辑模态框
+        function closeEditModal() {
+            const modal = document.getElementById('ship-edit-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
 
 
-// 查看轨迹历史
-function showTrackHistory(mmsi) {
-    // 创建轨迹历史弹窗
-    const modal = document.createElement('div');
-    modal.style.cssText = `
+        // 查看轨迹历史
+        function showTrackHistory(mmsi) {
+            // 创建轨迹历史弹窗
+            const modal = document.createElement('div');
+            modal.style.cssText = `
         position: fixed;
         top: 0;
         left: 0;
@@ -1350,8 +1417,8 @@ function showTrackHistory(mmsi) {
         align-items: center;
     `;
 
-    const content = document.createElement('div');
-    content.style.cssText = `
+            const content = document.createElement('div');
+            content.style.cssText = `
         background: white;
         border-radius: 8px;
         width: 500px;
@@ -1360,7 +1427,7 @@ function showTrackHistory(mmsi) {
         box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     `;
 
-    content.innerHTML = `
+            content.innerHTML = `
         <h3 style="margin-top:0; color:#2c3e50;">船舶轨迹查询 - ${mmsi}</h3>
         <div style="margin: 15px 0;">
             <label style="display:block; margin-bottom:5px;">开始时间:</label>
@@ -1382,43 +1449,43 @@ function showTrackHistory(mmsi) {
         </div>
     `;
 
-    modal.appendChild(content);
-    document.body.appendChild(modal);
+            modal.appendChild(content);
+            document.body.appendChild(modal);
 
-    // 点击模态框背景关闭
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.remove();
+            // 点击模态框背景关闭
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
         }
-    });
-}
 
-// 查询轨迹历史
-function queryTrackHistory(mmsi) {
-    const startTime = document.getElementById('track-start').value;
-    const endTime = document.getElementById('track-end').value;
+        // 查询轨迹历史
+        function queryTrackHistory(mmsi) {
+            const startTime = document.getElementById('track-start').value;
+            const endTime = document.getElementById('track-end').value;
 
-    if (!startTime || !endTime) {
-        alert('请选择开始和结束时间');
-        return;
-    }
+            if (!startTime || !endTime) {
+                alert('请选择开始和结束时间');
+                return;
+            }
 
-    console.log(`查询船舶 ${mmsi} 的轨迹: ${startTime} 到 ${endTime}`);
+            console.log(`查询船舶 ${mmsi} 的轨迹: ${startTime} 到 ${endTime}`);
 
-    // 这里可以调用Python后端获取轨迹数据
-    // 然后在地图上绘制轨迹
+            // 这里可以调用Python后端获取轨迹数据
+            // 然后在地图上绘制轨迹
 
-    // 关闭弹窗
-    document.querySelector('div[style*="background: rgba(0,0,0,0.5)"]').remove();
+            // 关闭弹窗
+            document.querySelector('div[style*="background: rgba(0,0,0,0.5)"]').remove();
 
-    // 显示加载提示
-    alert('轨迹查询功能开发中...');
-}
+            // 显示加载提示
+            alert('轨迹查询功能开发中...');
+        }
 
-// 更多选项弹窗
-function showMoreOptions(mmsi) {
-    const modal = document.createElement('div');
-    modal.style.cssText = `
+        // 更多选项弹窗
+        function showMoreOptions(mmsi) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
         position: fixed;
         top: 0;
         left: 0;
@@ -1431,8 +1498,8 @@ function showMoreOptions(mmsi) {
         align-items: center;
     `;
 
-    const content = document.createElement('div');
-    content.style.cssText = `
+            const content = document.createElement('div');
+            content.style.cssText = `
         background: white;
         border-radius: 8px;
         width: 400px;
@@ -1441,7 +1508,7 @@ function showMoreOptions(mmsi) {
         box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     `;
 
-    content.innerHTML = `
+            content.innerHTML = `
         <h3 style="margin-top:0; color:#2c3e50;">更多操作 - ${mmsi}</h3>
         <div style="margin: 20px 0;">
             <button onclick="alert('功能开发中')"
@@ -1469,38 +1536,67 @@ function showMoreOptions(mmsi) {
         </div>
     `;
 
-    modal.appendChild(content);
-    document.body.appendChild(modal);
+            modal.appendChild(content);
+            document.body.appendChild(modal);
 
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.remove();
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
         }
-    });
-}
 
-// 清除单个船舶标记
-function removeShipMarker(mmsi) {
-    if (shipMarkers && shipMarkers[mmsi]) {
-        // 从地图上移除标记
-        shipLayerGroup.removeLayer(shipMarkers[mmsi]);
-        // 从存储对象中删除
-        delete shipMarkers[mmsi];
-        console.log(`船舶 ${mmsi} 标记已移除`);
-        return true;
-    }
-    console.log(`船舶 ${mmsi} 不存在`);
-    return false;
-}
+        // 清除单个船舶标记
+        // 移除单个船舶标记
+        function removeShipMarker(mmsi) {
+            if (shipMarkers && shipMarkers[mmsi]) {
+                const marker = shipMarkers[mmsi];
+                const type = marker.options.shipData.status
+                const layerGroup = getLayerGroupByType(type);
 
-// 显示船舶信息表格（单击）- 改为显示右上角面板
-function showShipInfoPopup(marker) {
-    const ship = marker.options.shipData;
-    if (!ship) return;
+                // 从对应图层组移除
+                if (layerGroup) {
+                    layerGroup.removeLayer(marker);
+                }
 
-    console.log("显示船舶信息面板", ship.MMSI);
-    showShipInfoPanel(marker);
-}
+                // 从存储对象中删除
+                delete shipMarkers[mmsi];
+
+                console.log(`船舶 ${mmsi} 标记已移除`);
+                updateShipCounts();
+                return true;
+            }
+            return false;
+        }
+
+        // 清除所有船舶标记
+        function clearAllShipMarkers() {
+            if (!shipMarkers) return;
+
+            // 遍历所有船舶，从各自图层组移除
+            Object.values(shipMarkers).forEach(marker => {
+                const type = marker.options.shipData.status
+                const layerGroup = getLayerGroupByType(type);
+                if (layerGroup) {
+                    layerGroup.removeLayer(marker);
+                }
+            });
+
+            // 清空存储对象
+            shipMarkers = {};
+
+            console.log("已清除所有船舶标记");
+            updateShipCounts();
+        }
+
+        // 显示船舶信息表格（单击）- 改为显示右上角面板
+        function showShipInfoPopup(marker) {
+            const ship = marker.options.shipData;
+            if (!ship) return;
+
+            console.log("显示船舶信息面板", ship.MMSI);
+            showShipInfoPanel(marker);
+        }
 
 
 
@@ -1508,31 +1604,32 @@ function showShipInfoPopup(marker) {
         // 页面加载时立即执行一次（使用默认值）
         window.onload = function() {
             initMap();  // 使用默认坐标 28,110 和缩放 12
-             initCheckboxes();
+            initCheckboxes();
+            initShipLayerGroups();
             console.log("加载初始化完成")
-    //             // 等待地图完全加载后添加示例船舶
-    // setTimeout(() => {
-    //     const newShip = new Ship({
-    //
-    //         MMSI:23333,
-    //         name: 'name',
-    //             lat: 29.58,
-    //             lng: 106.65,
-    //             heading: 180,
-    //         status:'down'
-    //     })
-    //
-    //
-    //         updateShipMarker(newShip);
-    //         console.log('添加船舶:', newShip);
-    // }, 500);
+            //             // 等待地图完全加载后添加示例船舶
+            // setTimeout(() => {
+            //     const newShip = new Ship({
+            //
+            //         MMSI:23333,
+            //         name: 'name',
+            //             lat: 29.58,
+            //             lng: 106.65,
+            //             heading: 180,
+            //         status:'down'
+            //     })
+            //
+            //
+            //         updateShipMarker(newShip);
+            //         console.log('添加船舶:', newShip);
+            // }, 500);
         };
 
         // 暴露给 Python 调用的函数
         function setMapView(lat, lng, zoom) {
-             console.log('setMapView 被调用:', lat, lng, zoom);
-    console.log('当前 map 对象:', map);
-    console.log('地图容器:', document.getElementById('map'));
+            console.log('setMapView 被调用:', lat, lng, zoom);
+            console.log('当前 map 对象:', map);
+            console.log('地图容器:', document.getElementById('map'));
             centerLat=lat;
             centerLng=lng;
             if (!map) {
@@ -1540,11 +1637,11 @@ function showShipInfoPopup(marker) {
                 initMap(lat, lng, zoom);
             } else {
                 console.log('设置地图视图...');
-        console.log('当前视图:', map.getCenter(), '缩放:', map.getZoom());
+                console.log('当前视图:', map.getCenter(), '缩放:', map.getZoom());
 
-        map.setView([lat, lng], zoom);
+                map.setView([lat, lng], zoom);
             }
         }
-            </script>
-        </body>
-        </html>
+    </script>
+</body>
+</html>
