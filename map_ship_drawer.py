@@ -10,8 +10,51 @@ class MapShipDrawer(QObject):
 
     def __init__(self, web_view: QWebEngineView):
         super().__init__()
+        self.pyqt_bridge = None
         self.web_view = web_view
         self.ships = {}  # 记录已绘制的船舶mmsi
+
+    def setup_map_callbacks(self):
+        """设置地图回调函数"""
+        # 设置船舶数据变化回调
+        self.web_view.page().runJavaScript("""
+            window.onShipDataChanged = function(data) {
+                // 调用 Python 端的槽函数
+                if (window.pyQtBridge && window.pyQtBridge.shipDataChanged) {
+                    window.pyQtBridge.shipDataChanged(data);
+                }
+                console.log('船舶数据已修改:', data);
+            };
+        """)
+
+        # 设置 PyQt 桥接对象
+        class PyQtBridge(QObject):
+            shipDataChanged = pyqtSignal(str)
+
+            def __init__(self):
+                super().__init__()
+
+        self.pyqt_bridge = PyQtBridge()
+        self.pyqt_bridge.shipDataChanged.connect(self.on_ship_data_changed)
+
+        # 将桥接对象注入到 JavaScript
+        self.web_view.page().runJavaScript("""
+            window.pyQtBridge = {
+                shipDataChanged: function(data) {
+                    // 这个函数会被 Python 调用
+                }
+            };
+        """)
+
+        # 注册 Python 函数到 JavaScript
+        self.web_view.page().runJavaScript(f"""
+            window.pyQtBridge = window.pyQtBridge || {{}};
+            window.pyQtBridge.shipDataChanged = function(data) {{
+                // 调用 Python 端的槽函数
+                // 通过 QWebChannel 或直接调用
+                console.log('Ship data changed:', data);
+            }};
+        """)
 
     def draw_ship(self, ship:Dict) -> None:
         """

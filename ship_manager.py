@@ -529,7 +529,7 @@ class ShipManager(QObject):
 
         offline_mmsi = []
         for mmsi, ship in self.ships.items():
-            if current_time - ship.last_update > self.timeout_seconds:
+            if current_time - ship.timestamp > self.timeout_seconds:
                 offline_mmsi.append(mmsi)
 
         for mmsi in offline_mmsi:

@@ -48,7 +48,7 @@ class MQTTControlWidget(QWidget):
         # 添加定时器，定期清理离线船舶
         self.cleanup_timer = QTimer()
         self.cleanup_timer.timeout.connect(self.cleanup_offline_ships)
-        self.cleanup_timer.start(60000*1)  # 每5分钟检查一次
+        self.cleanup_timer.start(60000*5)  # 每5分钟检查一次
 
 
     def init_db(self):

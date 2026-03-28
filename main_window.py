@@ -11,7 +11,7 @@ import os
 from PyQt5.QtWebEngineWidgets import QWebEngineSettings
 
 from APIManager import APIManager,APIService
-from map_drawer import MapDrawer
+from mapBridge import MapBridge
 from mileage_region_manager import MileageRegionManager
 from queue_manager import QueueManager
 from ship_manager import ShipInfo
@@ -50,7 +50,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                """
         super().__init__()
 
-
+        self.bridge = None
+        self.channel = None
         self.reaches = None
         self.setupUi(self)  # 加载 UI 界面
         self.username = username
@@ -167,9 +168,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.loadMap()
 
+        # 设置 WebChannel
+        self.setup_web_channel()
+
 
 
         self.mqtt_widget.show()
+
+    # 在主窗口初始化时设置
+    def setup_web_channel(self):
+        # 创建桥接对象
+        self.bridge = MapBridge()
+
+        # 连接信号
+        self.bridge.shipDataChanged.connect(self.on_ship_data_changed)
+
+        # 创建 WebChannel
+        self.channel = QWebChannel()
+        self.channel.registerObject("pyQtBridge", self.bridge)
+
+        # 设置到 webView
+        self.webView.page().setWebChannel(self.channel)
+
 
     def init_time_display(self):
         """初始化时间显示"""
@@ -233,9 +253,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 当页面加载完成后，设置地图中心点和缩放
         self.webView.loadFinished.connect(self.on_load_finished)
 
+    def inject_webchannel_js(self):
+        """注入 WebChannel 初始化 JavaScript"""
+        # 确保 QWebChannel 脚本已加载
+        js_code = """
+        // 等待 QWebChannel 脚本加载
+        (function() {
+            if (typeof qt !== 'undefined' && qt.webChannelTransport) {
+                console.log('qt.webChannelTransport 已存在');
+                new QWebChannel(qt.webChannelTransport, function(channel) {
+                    window.pyQtBridge = channel.objects.pyQtBridge;
+                    console.log('WebChannel 初始化成功', window.pyQtBridge);
+
+                    // 发送初始化完成信号
+                    if (window.pyQtBridge) {
+                        window.pyQtBridge.log('WebChannel 初始化完成');
+                    }
+                });
+            } else {
+                console.log('等待 qt.webChannelTransport...');
+                setTimeout(arguments.callee, 100);
+            }
+        })();
+        """
+
+        self.webView.page().runJavaScript(js_code)
 
     def on_load_finished(self, ok):
         if ok:
+            # 注入 WebChannel 初始化代码
+            self.inject_webchannel_js()
+
+            # 可选：发送测试消息
+            self.webView.page().runJavaScript("""
+                        if (typeof pyQtBridge !== 'undefined') {
+                            console.log('WebChannel 初始化成功');
+                            pyQtBridge.log('地图已就绪');
+                        } else {
+                            console.log('WebChannel 未初始化');
+                        }
+                    """)
             river=self.db_manager.search_records("Reaches",{"ReachCode":self.reachCode})
             # 使用 split() 分割字符串
             longitude, latitude = river[0].get("CenterP").split(',')
@@ -767,6 +824,81 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.ship_drawer:
             # 批量绘制船舶
             self.ship_drawer.remove_ship(mmsi)
+
+    def on_ship_data_changed(self, data_str: str):
+        """
+        处理船舶信息修改
+
+        Args:
+            data_str: JSON格式的船舶更新数据
+        """
+        try:
+            import json
+            data = json.loads(data_str)
+
+            mmsi = data.get('MMSI')
+            new_name = data.get('name')
+            new_status = data.get('status')
+
+            print(f"收到船舶信息修改: MMSI={mmsi}, 名称={new_name}, 状态={new_status}")
+
+            # 更新本地数据库中的船舶名称
+            if hasattr(self, 'db_manager'):
+                # 更新 ShipName 表
+                self.db_manager.update_single_field(
+                    "ShipName",
+                    "ShipName",
+                    new_name,
+                    {"MMSI": mmsi}
+                )
+                print(f"已更新数据库中的船舶名称: {mmsi} -> {new_name}")
+
+            # 更新船舶管理器中的船舶信息
+            if hasattr(self, 'mqtt_widget') :
+                ship = self.mqtt_widget.ship_manager.ships.get(mmsi)
+                if ship:
+                    ship.name = new_name
+                    ship.status = new_status
+
+                    # 根据状态更新方向
+                    if new_status == 'up':
+                        ship.shipType = 'up'
+                    elif new_status == 'down':
+                        ship.shipType = 'down'
+                    elif new_status == 'docked':
+                        ship.shipType = 'docked'
+                    elif new_status == 'special':
+                        ship.shipType = 'special'
+
+                    self.mqtt_widget.ship_manager.ships[mmsi] = ship
+                    print(f"已更新船舶管理器中的信息: {mmsi}")
+
+            # 更新队列管理器中的船舶信息
+            if hasattr(self, 'queue_manager') and self.queue_manager:
+                # 更新待指挥队列中的船舶信息
+                if mmsi in self.queue_manager.pending_queue:
+                    self.queue_manager.pending_queue[mmsi]['name'] = new_name
+                    self.queue_manager.pending_queue[mmsi]['status'] = new_status
+                    self.queue_manager.pending_queue_changed.emit()
+
+                # 更新已指挥队列中的船舶信息
+                if mmsi in self.queue_manager.commanded_queue:
+                    self.queue_manager.commanded_queue[mmsi]['name'] = new_name
+                    self.queue_manager.commanded_queue[mmsi]['status'] = new_status
+                    self.queue_manager.commanded_queue_changed.emit()
+
+                # 更新控制区域队列中的船舶信息
+                if mmsi in self.queue_manager.control_area_queue:
+                    self.queue_manager.control_area_queue[mmsi]['name'] = new_name
+                    self.queue_manager.control_area_queue[mmsi]['status'] = new_status
+                    self.queue_manager.control_area_queue_changed.emit()
+
+
+        except Exception as e:
+            print(f"处理船舶信息修改失败: {e}")
+            import traceback
+            traceback.print_exc()
+
 
     def update_queue_status(self,mmsi,ship_info: ShipInfo, channel_position: dict):
         """更新船舶在队列中的状态"""

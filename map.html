@@ -6,6 +6,8 @@
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <link href="leaflet.css" rel="stylesheet" />
     <script src="leaflet.js"></script>
+    <!-- 引入 QWebChannel 脚本（必须） -->
+    <script src="qwebchannel.js"></script>
     <script src="ships.js"></script>
     <script src="ShipManager.js"></script>
     <style>
@@ -511,80 +513,6 @@
             }
         };
 
-
-        // 保存船舶更改
-        function saveShipChanges(shipId) {
-            // 获取当前打开的popup
-            const popup = document.querySelector('.leaflet-popup-content');
-            if (!popup) return;
-
-            // 获取表单数据
-            const name = popup.querySelector('#ship-name').value;
-            const type = popup.querySelector('#ship-type').value;
-            const speed = parseFloat(popup.querySelector('#ship-speed').value) || 0;
-
-            // 找到对应的marker（这里需要根据你的存储方式查找）
-            const marker = findMarkerById(shipId); // 需要实现这个函数
-
-            if (marker) {
-                // 更新marker数据
-                const shipData = marker.options.shipData;
-                shipData.name = name;
-                shipData.type = type;
-                shipData.speed = speed;
-
-                // 更新图标颜色
-                const typeConfig = SHIP_TYPE_CONFIG[type];
-                if (typeConfig) {
-                    const icon = marker.getIcon();
-                    const newIconHtml = `
-                <svg width="30" height="30" viewBox="0 0 30 30">
-                    <polygon
-                        points="15,0 30,30 0,30"
-                        fill="${typeConfig.color}"
-                        stroke="#2c3e50"
-                        stroke-width="1.5"
-                        transform="rotate(${heading}, 15, 15)"
-                    />
-                    <line
-                        x1="15" y1="6"
-                        x2="15" y2="0"
-                        stroke="white"
-                        stroke-width="2"
-                    />
-                </svg>
-            `;
-
-                    icon.options.html = newIconHtml;
-                    marker.setIcon(icon);
-                }
-
-                // 关闭popup并显示成功消息
-                marker.closePopup();
-
-                // 可以重新打开信息popup显示更新后的信息
-                setTimeout(() => {
-                    showShipInfoPopup(marker);
-
-                    // 显示保存成功提示
-                    L.popup()
-                        .setLatLng(marker.getLatLng())
-                        .setContent('<div style="color:green; padding:5px;">✓ 保存成功</div>')
-                        .openOn(map);
-
-                    setTimeout(() => {
-                        map.closePopup();
-                    }, 1500);
-                }, 300);
-
-                console.log('船舶信息已更新:', shipData);
-
-                // 触发自定义事件（可选）
-                if (window.onShipUpdated) {
-                    window.onShipUpdated(shipData);
-                }
-            }
-        }
 
         // 移除船舶
         window.removeShip = function(ship) {
@@ -1368,27 +1296,19 @@ window.saveShipChanges = function(mmsi) {
     closeEditModal();
 
     // 显示成功提示
-    showNotification(`船舶 ${newName} 信息已更新`, 'success');
+    // showNotification(`船舶 ${newName} 信息已更新`, 'success');
 
-    // 发送更新信息到主函数（Python）
-    if (window.onShipDataChanged) {
-        // 构建更新数据
-        const updateData = {
-            MMSI: ship.MMSI,
-            name: newName,
-            status: newStatus,
-            oldStatus: oldStatus,
-            oldName: oldName,
-            latitude: ship.latitude,
-            longitude: ship.longitude,
-            heading: ship.heading,
-            speed: ship.speed,
-            updateTime: ship.updateTime
-        };
-
-        console.log('通知主函数船舶信息已修改:', updateData);
-        window.onShipDataChanged(JSON.stringify(updateData));
-    }
+    // 通知 Python 端
+            if (window.pyQtBridge) {
+                const updateData = {
+                    MMSI: mmsi,
+                    name: newName,
+                    status: newStatus,
+                };
+                window.pyQtBridge.onShipDataChanged(JSON.stringify(updateData));
+            } else {
+                console.log('pyQtBridge 未初始化');
+            }
 };
 
         // 关闭编辑模态框
@@ -1642,6 +1562,7 @@ window.saveShipChanges = function(mmsi) {
                 map.setView([lat, lng], zoom);
             }
         }
+
     </script>
 </body>
 </html>
