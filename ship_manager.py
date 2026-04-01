@@ -38,6 +38,7 @@ class ShipInfo:
     up_or_down: list = None  #四个bool值列表，true为下水，false为上水
     status: str = None #船舶的状态，上水、下水、停靠、特殊
     shipType: str =None  #船舶的人工设定状态,None:未设定，'up','down','docked','special'
+    staticInfo: dict = None #船舶静态信息
 
 
 
@@ -54,6 +55,7 @@ class ShipInfo:
             'status': self.status,
             'shipType': self.shipType if self.shipType is not None else "",
             'last_update_time': self.last_update_time,
+            'staticInfo': self.staticInfo if self.staticInfo is not None else "",
         }
 
 
@@ -160,6 +162,9 @@ class ShipManager(QObject):
                     speed=speed,
                     timestamp=timestamp
                 )
+
+                # staticInfo = self.api_service.get_static_info(mmsi)
+                # ship.static_info = staticInfo
 
                 #计算船舶的位置和方向,方向是docked就表示是停泊了，是up或down表示这次判断
                 position_and_direction=self.calculate_ship_position_and_direction(
@@ -307,6 +312,7 @@ class ShipManager(QObject):
                 ship.last_update_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
 
                 self.ships[mmsi] = ship
+
                 self._init_track_history(mmsi)
                 self._add_to_track_history(mmsi, ship.longitude,
                                            ship.latitude, current_time)

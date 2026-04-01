@@ -617,6 +617,9 @@ class APIService:
         else:
             return False
 
+    def get_ship_static_info(self,mmsi):
+        data = self.api_manager.get("/api/Ship/GetShipStatic", {"MMSI": mmsi})
+        return data
 # ========== 使用示例 ==========
 if __name__ == "__main__":
     api=APIService("http://isc.cqu.edu.cn:23456")

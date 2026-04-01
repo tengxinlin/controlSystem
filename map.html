@@ -1214,6 +1214,16 @@
                 <option value="unknown" ${ship.status === 'unknown' ? 'selected' : ''}>未知</option>
             </select>
         </div>
+        <div style="margin-bottom:20px;">
+            <label style="display:block; margin-bottom:5px; color:#7f8c8d; font-size:18px;">
+                特殊船舶
+            </label>
+            <select id="edit-ship-special"
+                style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; background:white;font-size:18px;">
+                <option value="1" ${ship.status === 'special' ? 'selected' : ''}>是</option>
+                <option value="0" ${ship.status !== 'special' ? 'selected' : ''}>否</option>
+            </select>
+        </div>
 
         <div style="background:#f8f9fa; padding:10px; border-radius:4px; margin-bottom:20px;font-size:18px;">
             <div style=" color:#7f8c8d; margin-bottom:5px;">当前信息：</div>

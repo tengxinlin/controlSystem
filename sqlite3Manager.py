@@ -396,15 +396,32 @@ if __name__ == "__main__":
         longitude = river[0].get("UpBordLine")
         print(f"经度: {longitude}")
 
-        # # 1. 创建示例表
-        # db_manager.create_table_if_not_exists("employees", {
-        #     "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
-        #     "name": "TEXT NOT NULL",
-        #     "age": "INTEGER",
-        #     "department": "TEXT",
-        #     "salary": "REAL",
-        #     "hire_date": "TEXT"
-        # })
+        TABLE_SCHEMA = {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "mmsi": "TEXT NOT NULL",
+            "name": "TEXT NOT NULL",
+            "direction": "TEXT NOT NULL",  # 'up' 或 'down'
+            "tug_count": "INTEGER DEFAULT 0",
+            "cargo": "TEXT",
+            "actual_load": "REAL DEFAULT 0",
+            "rated_load": "REAL DEFAULT 0",
+            "water_level": "REAL DEFAULT 0",
+            "duty_person": "TEXT",
+            "weather": "TEXT",
+            "pushing_status": "TEXT",
+            "remark": "TEXT",
+            "forecast_time": "INTEGER DEFAULT 0",  # 预告时间戳
+            "supplement_time": "INTEGER DEFAULT 0",  # 补充时间戳
+            "start_hang_time": "INTEGER DEFAULT 0",  # 起挂时间戳
+            "half_pole_time": "INTEGER DEFAULT 0",  # 半杆时间戳
+            "enter_channel_time": "INTEGER DEFAULT 0",  # 进漕时间戳
+            "exit_channel_time": "INTEGER DEFAULT 0",  # 出漕时间戳
+            "create_time": "INTEGER DEFAULT 0",  # 创建时间戳
+            "last_update": "INTEGER DEFAULT 0",  # 最后更新时间戳
+            "is_active": "INTEGER DEFAULT 1"  # 是否活跃记录（1=活跃，0=已完成）
+        }
+        # 1. 创建示例表
+        db_manager.create_table_if_not_exists("CommandRecord", TABLE_SCHEMA)
         #
         # # 2. 插入测试数据
         # test_data = [

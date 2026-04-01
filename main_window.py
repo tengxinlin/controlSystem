@@ -13,6 +13,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineSettings
 from APIManager import APIManager,APIService
 from mapBridge import MapBridge
 from mileage_region_manager import MileageRegionManager
+from passage_record_manager import PassageRecordManager
 from queue_manager import QueueManager
 from ship_manager import ShipInfo
 from sqlite3Manager import SQLiteTableManager
@@ -84,6 +85,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 创建MQTT控件
         self.mqtt_widget = MQTTControlWidget(api_service)
+        # 设置窗口关闭事件（重写closeEvent，让关闭变成隐藏）
+        self.mqtt_widget.setAttribute(Qt.WA_DeleteOnClose, False)  # 关闭时不删除对象
+        self.mqtt_widget.setWindowFlags(self.mqtt_widget.windowFlags() | Qt.Window)  # 确保是独立窗口
+
+       
+        # 连接按钮信号
+        self.mqtt_btn.clicked.connect(self.show_mqtt_widget)
 
 
         #创建地图船舶绘制器
@@ -154,6 +162,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cleanup_timer.timeout.connect(self.cleanup_expired_ships)
         self.cleanup_timer.start(60000*5)  # 每5分钟清理一次
 
+
+        # 创建通行记录管理器
+        self.passage_record_manager = PassageRecordManager(self.db_manager)
+        # 连接信号
+        self.passage_record_manager.record_created.connect(self.on_record_created)
+        self.passage_record_manager.record_completed.connect(self.on_record_completed)
+
+        # 设置定时器自动清理
+        self.cleanup_timer_record = QTimer()
+        self.cleanup_timer_record.timeout.connect(self.passage_record_manager.auto_cleanup)
+        self.cleanup_timer_record.start(3600000)  # 每小时清理一次
+        self.record_btn.clicked.connect(self.show_passage_records)
+
         #api接口
         self.api = api_service
 
@@ -201,6 +222,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 立即更新一次
         self.update_time_display()
 
+    def show_passage_records(self):
+        """显示通行记录管理界面"""
+        from passage_record_dialog import PassageRecordDialog
+        dialog = PassageRecordDialog(self.passage_record_manager, self)
+        dialog.record_saved.connect(self.on_record_saved)
+        dialog.exec_()
+
+    def on_record_created(self, mmsi):
+        print(f"新通行记录创建: {mmsi}")
+
+    def on_record_completed(self, mmsi):
+        print(f"通行记录完成: {mmsi}")
+
+
+    def on_record_saved(self, record):
+        """记录保存后的处理"""
+        print(f"记录已保存: {record}")
+
+    # 在更新船舶位置时调用
+    def update_ship_position(self, ship_info, position_info):
+        """更新船舶位置时更新通行记录"""
+        self.passage_record_manager.update_from_ship_manager(
+            ship_info,
+            in_reveal_area=position_info.get('in_up_reveal_area') or position_info.get('in_down_reveal_area'),
+            in_control_area=position_info.get('in_control_area', False)
+        )
+
     def update_time_display(self):
         """更新时间显示"""
         # 获取当前时间
@@ -212,6 +260,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 更新标签
         self.label_time.setText(time_str)
+
+    def show_mqtt_widget(self):
+        """显示MQTT界面"""
+        if self.mqtt_widget.isVisible():
+            # 如果已经显示，则激活并置前
+            self.mqtt_widget.raise_()
+            self.mqtt_widget.activateWindow()
+        else:
+            # 如果隐藏，则显示
+            self.mqtt_widget.show()
+            self.mqtt_widget.raise_()
 
     def loadMap(self):
         """加载HTML地图文件"""
@@ -851,7 +910,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     new_name,
                     {"MMSI": mmsi}
                 )
+                #接口更新船名
+
                 print(f"已更新数据库中的船舶名称: {mmsi} -> {new_name}")
+
 
             # 更新船舶管理器中的船舶信息
             if hasattr(self, 'mqtt_widget') :
