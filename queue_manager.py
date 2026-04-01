@@ -13,9 +13,9 @@ class QueueManager(QObject):
     commanded_queue_changed = pyqtSignal()  # 已指挥队列变化
     control_area_queue_changed = pyqtSignal()  # 控制河段区域内队列变化
 
-    def __init__(self):
+    def __init__(self,passage_record_manager):
         super().__init__()
-
+        self.passage_record_manager = passage_record_manager#船舶记录管理器
         # 待指挥队列（在上下水计算范围内，等待指挥）
         self.pending_queue: Dict[str, dict] = {}  # mmsi -> ship_info
 

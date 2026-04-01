@@ -481,38 +481,6 @@ class ShipManager(QObject):
         return distance > threshold_meters
 
 
-    def _update_queue_status(self, mmsi: str, ship_info: ShipInfo, channel_position: dict):
-        """更新船舶在队列中的状态"""
-        if not channel_position or not hasattr(self, 'queue_manager'):
-            return
-
-        # 构建队列用的船舶信息
-        queue_ship_info = {
-            'mmsi': mmsi,
-            'name': ship_info.name,
-            'lat': ship_info.latitude,
-            'lon': ship_info.longitude,
-            'heading': ship_info.heading,
-            'speed': ship_info.speed,
-            'direction': ship_info.direction,
-            'in_up_calc': channel_position.get('in_up_calc_range', False),
-            'in_down_calc': channel_position.get('in_down_calc_range', False),
-            'in_control_area': channel_position.get('in_control_area', False),
-            'in_park': channel_position.get('in_park', False),
-            'estimated_km': channel_position.get('estimated_km'),
-            'timestamp': time.time()
-        }
-
-        # 调用队列管理器更新状态
-        self.queue_manager.update_ship_queue_status(
-            mmsi=mmsi,
-            ship_info=queue_ship_info,
-            in_up_calc=queue_ship_info['in_up_calc'],
-            in_down_calc=queue_ship_info['in_down_calc'],
-            in_control_area=queue_ship_info['in_control_area'],
-            in_park=queue_ship_info['in_park']
-        )
-
     def _init_track_history(self, mmsi: str):
         """初始化船舶轨迹历史"""
         if mmsi not in self.track_history:

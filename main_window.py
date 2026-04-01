@@ -148,14 +148,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 创建里程区域管理器
         self.mileage_manager = MileageRegionManager()
-        # 创建队列管理器
-        from queue_manager import QueueManager
-        self.queue_manager = QueueManager()
 
-        # 连接队列变化信号到表格更新
-        self.queue_manager.pending_queue_changed.connect(self.update_pending_table)
-        self.queue_manager.commanded_queue_changed.connect(self.update_commanded_table)
-        self.queue_manager.control_area_queue_changed.connect(self.update_control_area_table)
 
         # 设置定时器清理过期船舶
         self.cleanup_timer = QTimer()
@@ -175,13 +168,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cleanup_timer_record.start(3600000)  # 每小时清理一次
         self.record_btn.clicked.connect(self.show_passage_records)
 
+        # 创建队列管理器
+        from queue_manager import QueueManager
+        self.queue_manager = QueueManager(self.passage_record_manager)
+
+        # 连接队列变化信号到表格更新
+        self.queue_manager.pending_queue_changed.connect(self.update_pending_table)
+        self.queue_manager.commanded_queue_changed.connect(self.update_commanded_table)
+        self.queue_manager.control_area_queue_changed.connect(self.update_control_area_table)
+
         #api接口
         self.api = api_service
 
         self.initLocalDB()
 
         #控制河段信息读取
-
+        # 设置日志控件
+        self.setup_log_widget()
+        # 显示启动日志
+        self.log_message(f"系统启动，欢迎用户: {username}")
 
         # 控制河段选择COMBOX信号连接
         self.comboBox.currentTextChanged.connect(self.on_reach_selected)
@@ -221,6 +226,76 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 立即更新一次
         self.update_time_display()
+
+    # 日志控件
+    def setup_log_widget(self):
+        """设置日志控件"""
+        # 设置只读模式
+        self.plainTextEdit.setReadOnly(True)
+
+        # 设置字体（等宽字体便于查看）
+        font = self.plainTextEdit.font()
+        font.setFamily("Consolas")
+        font.setPointSize(10)
+        self.plainTextEdit.setFont(font)
+
+        # 设置样式（简洁的深色背景）
+        self.plainTextEdit.setStyleSheet("""
+            QPlainTextEdit {
+                border: 1px solid #3c3c3c;
+                border-radius: 3px;
+                padding: 5px;
+            }
+        """)
+
+        # 日志最大行数限制
+        self.max_log_lines = 1000
+        self.current_log_lines = 0
+
+    def log_message(self, message: str):
+        """
+        记录系统日志消息
+
+        Args:
+            message: 日志消息内容
+        """
+        # 获取当前时间
+        current_time = QDateTime.currentDateTime()
+        time_str = current_time.toString("yyyy-MM-dd HH:mm:ss")
+
+        # 格式化消息
+        log_line = f"[{time_str}] {message}\n"
+
+        # 获取当前文本光标
+        cursor = self.plainTextEdit.textCursor()
+        cursor.movePosition(cursor.End)
+
+        # 插入文本
+        cursor.insertText(log_line)
+
+        # 更新行数计数
+        self.current_log_lines += 1
+
+        # 如果超过最大行数，删除最前面的行
+        if self.current_log_lines > self.max_log_lines:
+            # 获取文档
+            doc = self.plainTextEdit.document()
+            # 删除第一行
+            cursor = self.plainTextEdit.textCursor()
+            cursor.movePosition(cursor.Start)
+            cursor.select(cursor.BlockUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()  # 删除换行符
+            self.current_log_lines -= 1
+
+        # 自动滚动到底部
+        self.plainTextEdit.ensureCursorVisible()
+
+    def clear_log(self):
+        """清空日志"""
+        self.plainTextEdit.clear()
+        self.current_log_lines = 0
+        self.log_message("日志已清空")
 
     def show_passage_records(self):
         """显示通行记录管理界面"""
@@ -993,6 +1068,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             in_control_area=queue_ship_info['in_control_area'],
             in_park=queue_ship_info['in_park']
         )
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
