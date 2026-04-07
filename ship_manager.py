@@ -128,8 +128,8 @@ class ShipManager(QObject):
             longitude = float(parts[2].strip())
             latitude = float(parts[3].strip())
             course = float(parts[4].strip())/10
-            speed = float(parts[5].strip()) / 10 if float(parts[5].strip()) / 10 > 20 else 0
-            timestamp = float(parts[6].strip())
+            speed = float(parts[6].strip()) / 10 if float(parts[6].strip()) / 10 <20 else 0
+            timestamp = time.time()
 
             current_time = time.time()
             # 检查是否已有该船舶

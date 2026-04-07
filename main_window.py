@@ -13,6 +13,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineSettings
 from APIManager import APIManager,APIService
 from mapBridge import MapBridge
 from mileage_region_manager import MileageRegionManager
+from passage_record_edit_dialog import PassageRecordEditDialog
 from passage_record_manager import PassageRecordManager
 from queue_manager import QueueManager
 from ship_manager import ShipInfo
@@ -199,7 +200,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
 
-        self.mqtt_widget.show()
+        # self.mqtt_widget.show()
 
     # 在主窗口初始化时设置
     def setup_web_channel(self):
@@ -208,6 +209,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 连接信号
         self.bridge.shipDataChanged.connect(self.on_ship_data_changed)
+        self.bridge.edit_ship_passage_record.connect(self.edit_ship_passage_record)
 
         # 创建 WebChannel
         self.channel = QWebChannel()
@@ -216,6 +218,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 设置到 webView
         self.webView.page().setWebChannel(self.channel)
 
+    def edit_ship_passage_record(self, mmsi: str,name:str):
+        """
+        编辑/新增船舶通行记录
+
+        Args:
+            mmsi: 船舶MMSI
+            name: 船名
+        """
+        dialog = PassageRecordEditDialog(mmsi,name, self.passage_record_manager, self)
+        dialog.record_saved.connect(self.on_passage_record_saved)
+        dialog.exec_()
+
+    def on_passage_record_saved(self, record_data):
+        """通行记录保存后的处理"""
+        self.log_message(f"通行记录已保存: {record_data.get('name')} ({record_data.get('mmsi')})")
 
     def init_time_display(self):
         """初始化时间显示"""
@@ -1039,8 +1056,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def update_queue_status(self,mmsi,ship_info: ShipInfo, channel_position: dict):
         """更新船舶在队列中的状态"""
-        if not channel_position or not hasattr(self, 'queue_manager'):
-            return
+
+        #判断船舶是否在计算范围区域内
 
         # 构建队列用的船舶信息
         queue_ship_info = {

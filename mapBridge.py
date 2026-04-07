@@ -6,18 +6,21 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 class MapBridge(QObject):
     """地图与Python的桥接类"""
     shipDataChanged = pyqtSignal(str)  # 船舶数据变化信号
-
+    edit_ship_passage_record = pyqtSignal(str,str)
     @pyqtSlot(str)
     def onShipDataChanged(self, data_str):
         """接收船舶数据变化"""
         try:
-
             # 这里可以发射信号让其他模块处理
             self.shipDataChanged.emit(data_str)
-
-
         except Exception as e:
             print(f"处理失败: {e}")
+
+    @pyqtSlot(str,str)
+    def editPassageRecord(self, mmsi,name):
+        """显示船舶通行记录"""
+        #发射信号让主函数处理
+        self.edit_ship_passage_record.emit(mmsi,name)
 
     @pyqtSlot(str)
     def log(self, message):

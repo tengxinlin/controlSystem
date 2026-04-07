@@ -1122,6 +1122,10 @@
             style="flex:1; padding: 8px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">
             ✏️ 编辑
         </button>
+         <button onclick="editPassageRecord('${ship.MMSI}','${ship.name}')"
+            style="flex:1; padding: 8px; background: #2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            📋 通行记录
+        </button>
         <button onclick="showTrackHistory('${ship.MMSI}')"
             style="flex:1; padding: 8px; background: #2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer;">
             📊 查看轨迹
@@ -1320,6 +1324,17 @@ window.saveShipChanges = function(mmsi) {
                 console.log('pyQtBridge 未初始化');
             }
 };
+
+       // 编辑通行记录
+function editPassageRecord(mmsi,name) {
+    // 调用 Python 方法
+    if (window.pyQtBridge && window.pyQtBridge.editPassageRecord) {
+        window.pyQtBridge.editPassageRecord(mmsi,name);
+    } else {
+        console.log('通行记录编辑功能需要 Python 端支持');
+        alert('通行记录编辑功能开发中...');
+    }
+}
 
         // 关闭编辑模态框
         function closeEditModal() {
