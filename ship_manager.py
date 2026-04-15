@@ -221,11 +221,22 @@ class ShipManager(QObject):
                 calc_range = None
 
                 #在上水计算范围内
-                if in_up_calc:
+                if in_up_calc and ship.status=='up':
                     calc_range = 'up'
-                elif in_down_calc:
+
+                elif in_down_calc and ship.status=='down':
                     calc_range = 'down'
 
+                # 速度转换：节 -> 公里/分钟
+                # 1节 = 1.852公里/小时 = 1.852/60 ≈ 0.0308667公里/分钟
+                speed_km_per_min = speed * 1.852 / 60
+                km_diff=abs(position_and_direction.get('estimated_km') - self.mileage_manager.up_bound_km)
+                # 计算时间（分钟）
+                if speed_km_per_min:
+                    time_minutes = km_diff / speed_km_per_min
+                    position_and_direction['time_minutes']=round(time_minutes, 1) #保留一位小数
+
+                #船舶在哪个计算范围区域
                 ship.calc_range = calc_range
 
                 # 转换为本地时间的结构化对象
@@ -277,6 +288,7 @@ class ShipManager(QObject):
                 position_and_direction = self.calculate_ship_position_and_direction(
                     latitude, longitude, course,speed
                 )
+
                 #第一次判断上下水时,定义好上下水列表
                 if position_and_direction["direction"] == "down":
                     ship.up_or_down = [True,True,True,True]
@@ -327,6 +339,73 @@ class ShipManager(QObject):
         except (ValueError, IndexError) as e:
             print(f"解析AIS消息失败: {e}, 消息: {message}")
             return None
+
+    def calculate_time_to_up_bound(self, ship_estimated_km: float, ship_speed: float, up_bound_km: float) -> Optional[
+        float]:
+        """
+        计算船舶到达上界限标所需的时间
+
+        Args:
+            ship_estimated_km: 船舶当前的预估里程数（公里）
+            ship_speed: 船舶速度（节）
+            up_bound_km: 上界限标所在的里程数（公里）
+
+        Returns:
+            到达所需时间（分钟），如果速度无效或船舶已过界限标返回None
+        """
+        # 速度必须大于0
+        if ship_speed <= 0:
+            return None
+
+        # 计算里程差（公里）
+        km_diff = up_bound_km - ship_estimated_km
+
+        # 如果里程差为负，说明船舶已经过了上界限标
+        if km_diff <= 0:
+            return 0  # 已到达或已通过
+
+        # 速度转换：节 -> 公里/分钟
+        # 1节 = 1.852公里/小时 = 1.852/60 ≈ 0.0308667公里/分钟
+        speed_km_per_min = ship_speed * 1.852 / 60
+
+        # 计算时间（分钟）
+        time_minutes = km_diff / speed_km_per_min
+
+        # 保留一位小数
+        return round(time_minutes, 1)
+
+    def calculate_time_to_down_bound(self, ship_estimated_km: float, ship_speed: float, down_bound_km: float) -> \
+    Optional[float]:
+        """
+        计算船舶到达下界限标所需的时间
+
+        Args:
+            ship_estimated_km: 船舶当前的预估里程数（公里）
+            ship_speed: 船舶速度（节）
+            down_bound_km: 下界限标所在的里程数（公里）
+
+        Returns:
+            到达所需时间（分钟），如果速度无效或船舶已过界限标返回None
+        """
+        # 速度必须大于0
+        if ship_speed <= 0:
+            return None
+
+        # 计算里程差（公里）
+        km_diff = ship_estimated_km - down_bound_km
+
+        # 如果里程差为负，说明船舶已经过了下界限标
+        if km_diff <= 0:
+            return 0  # 已到达或已通过
+
+        # 速度转换：节 -> 公里/分钟
+        speed_km_per_min = ship_speed * 1.852 / 60
+
+        # 计算时间（分钟）
+        time_minutes = km_diff / speed_km_per_min
+
+        # 保留一位小数
+        return round(time_minutes, 1)
 
     def calculate_ship_position_and_direction(self, ship_lat: float, ship_lon: float,
                                               ship_heading: float,speed:float, ship_mmsi: str = None,) -> dict:

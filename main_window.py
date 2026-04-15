@@ -65,6 +65,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         height = int(screen_size.height() *0.95)
         self.resize(width, height)
 
+        # 记录程序启动时间
+        self.startup_time = time.time()
+        self.is_open = False  # 是否开机超过2分钟
         # 初始化时间显示
         self.init_time_display()
 
@@ -352,6 +355,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 更新标签
         self.label_time.setText(time_str)
+
+        # 2. 判断是否开机超过2分钟
+        if not self.is_open:
+            elapsed = time.time() - self.startup_time
+            if elapsed >= 120:  # 2分钟 = 120秒
+                self.is_open = True
+                print(f"✓ 程序已运行 {elapsed:.0f} 秒 ({elapsed / 60:.1f}分钟)，系统已就绪")
 
     def show_mqtt_widget(self):
         """显示MQTT界面"""
@@ -821,13 +831,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # 细分区域
             self.mileage_manager._subdivide_regions()
 
+
             #计算上界限标的中心点坐标
             lat=(reach.up_bound_line.start.lat+reach.up_bound_line.end.lat)/2
             lon=(reach.down_bound_line.start.lon+reach.down_bound_line.end.lon)/2
 
             self.mileage_manager.calculate_upBoardkm(lat,lon)
 
-
+            # self.mileage_manager.visualize_subdivision()
             print(f"成功加载航道里程线: {len(self.mileage_manager.mileage_lines)} 条")
             print(f"里程范围: {min_km}km - {max_km}km")
 
@@ -1057,34 +1068,53 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def update_queue_status(self,mmsi,ship_info: ShipInfo, channel_position: dict):
         """更新船舶在队列中的状态"""
 
+        #位置字典的关键字
+        # estimated_km 估计的里程数
+        # in_special 是否在特殊区
+        # in_up_calc_range 是否在上水区域
+        # in_down_calc_range 是否在下水区域
+        # in_control_area 是否在控制河段区域
+        # in_up_reveal_area 是否在上水揭示区域
+        # in_down_reveal_area 是否在下水揭示区域
+        #time_minutes 到达上界限标所需时间
+
+        #开机时间没超过两分钟，不对船舶队列进行更新和指挥判断
+        if not self.is_open:
+            return
+
+
         #判断船舶是否在计算范围区域内
+        if ship_info.calc_range:
+            #如果船舶在上下水计算范围区域内，需要将船舶信息转化为队列信息
+            # 构建队列用的船舶信息
+            queue_ship_info = {
+                'mmsi': mmsi,
+                'name': ship_info.name,
+                'lat': ship_info.latitude,
+                'lon': ship_info.longitude,
+                'heading': ship_info.heading,
+                'speed': ship_info.speed,
+                'status': ship_info.status,
+                'in_up_calc': channel_position.get('in_up_calc_range', False),
+                'in_down_calc': channel_position.get('in_down_calc_range', False),
+                'in_control_area': channel_position.get('in_control_area', False),
+                'in_park': channel_position.get('in_park', False),
+                'estimated_km': channel_position.get('estimated_km'),
+                'timestamp': time.time()
+            }
 
-        # 构建队列用的船舶信息
-        queue_ship_info = {
-            'mmsi': mmsi,
-            'name': ship_info.name,
-            'lat': ship_info.latitude,
-            'lon': ship_info.longitude,
-            'heading': ship_info.heading,
-            'speed': ship_info.speed,
-            'direction': ship_info.direction,
-            'in_up_calc': channel_position.get('in_up_calc_range', False),
-            'in_down_calc': channel_position.get('in_down_calc_range', False),
-            'in_control_area': channel_position.get('in_control_area', False),
-            'in_park': channel_position.get('in_park', False),
-            'estimated_km': channel_position.get('estimated_km'),
-            'timestamp': time.time()
-        }
+            # 调用队列管理器更新状态
+            self.queue_manager.update_ship_queue_status(
+                mmsi=mmsi,
+                ship_info=queue_ship_info,
+                in_up_calc=queue_ship_info['in_up_calc'],
+                in_down_calc=queue_ship_info['in_down_calc'],
+                in_control_area=queue_ship_info['in_control_area'],
+                in_park=queue_ship_info['in_park']
+            )
 
-        # 调用队列管理器更新状态
-        self.queue_manager.update_ship_queue_status(
-            mmsi=mmsi,
-            ship_info=queue_ship_info,
-            in_up_calc=queue_ship_info['in_up_calc'],
-            in_down_calc=queue_ship_info['in_down_calc'],
-            in_control_area=queue_ship_info['in_control_area'],
-            in_park=queue_ship_info['in_park']
-        )
+
+
 
 
 

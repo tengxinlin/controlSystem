@@ -16,7 +16,7 @@ class MileageRegionManager:
         # 细分参数
         self.subdivision_count = 100  # 每个区域细分成100份
 
-        self.upBoardkm=0
+        self.up_bound_km=0
 
 
     def load_from_db(self, db_manager):
@@ -117,6 +117,7 @@ class MileageRegionManager:
         将每个里程区域细分为1000份
         """
         self.subregions.clear()
+        self.subdivision_areas = {}  # 新增：存储细分区域（相邻两条线之间的区域）
 
         for region in self.mileage_regions:
             region_id = region.region_id
@@ -127,30 +128,100 @@ class MileageRegionManager:
             down_start = region.downstream_line.start_point
             down_end = region.downstream_line.end_point
 
+            # 匹配端点：判断上游起点应该对应下游起点还是下游终点
+            # 计算上游起点到下游两个端点的距离
+            dist_start_to_down_start = haversine_distance(
+                up_start[0], up_start[1], down_start[0], down_start[1]
+            )
+            dist_start_to_down_end = haversine_distance(
+                up_start[0], up_start[1], down_end[0], down_end[1]
+            )
+
+            # 计算上游终点到下游两个端点的距离
+            dist_end_to_down_start = haversine_distance(
+                up_end[0], up_end[1], down_start[0], down_start[1]
+            )
+            dist_end_to_down_end = haversine_distance(
+                up_end[0], up_end[1], down_end[0], down_end[1]
+            )
+
+            # 确定匹配关系
+            # 方案1: 起点匹配到最近的，终点匹配到另一个
+            if dist_start_to_down_start + dist_end_to_down_end < dist_start_to_down_end + dist_end_to_down_start:
+                # 起点对应下游起点，终点对应下游终点
+                matched_down_start = down_start
+                matched_down_end = down_end
+                match_type = "正常匹配"
+            else:
+                # 起点对应下游终点，终点对应下游起点（交叉）
+                matched_down_start = down_end
+                matched_down_end = down_start
+                match_type = "交叉匹配"
+
             # 细分点列表
             sub_points = []
 
-            # 在上下游里程线之间进行线性插值
+            # 在上下游里程线的对应端点之间进行线性插值
             for i in range(self.subdivision_count + 1):
                 t = i / self.subdivision_count  # 插值参数 0~1
 
-                # 在上游线上插值
-                up_lat = up_start[0] + t * (up_end[0] - up_start[0])
-                up_lon = up_start[1] + t * (up_end[1] - up_start[1])
+                # 起点之间的插值（上游起点 -> 下游起点）
+                start_lat = up_start[0] + t * (matched_down_start[0] - up_start[0])
+                start_lon = up_start[1] + t * (matched_down_start[1] - up_start[1])
 
-                # 在下游线上插值
-                down_lat = down_start[0] + t * (down_end[0] - down_start[0])
-                down_lon = down_start[1] + t * (down_end[1] - down_start[1])
+                # 终点之间的插值（上游终点 -> 下游终点）
+                end_lat = up_end[0] + t * (matched_down_end[0] - up_end[0])
+                end_lon = up_end[1] + t * (matched_down_end[1] - up_end[1])
 
-                # 将上下游点都保存
+                # 保存当前细分位置的线段（两个端点）
                 sub_points.append({
                     'index': i,
                     't': t,
-                    'up_point': (up_lat, up_lon),
-                    'down_point': (down_lat, down_lon)
+                    'start_point': (start_lat, start_lon),  # 靠近起点侧的点
+                    'end_point': (end_lat, end_lon),  # 靠近终点侧的点,
+                    'km': region.upstream_km + t * (region.downstream_km - region.upstream_km)  # 对应的里程数
                 })
 
             self.subregions[region_id] = sub_points
+
+            # 构建细分区域（相邻两条细分线之间的区域）
+            areas = []
+            for i in range(len(sub_points) - 1):
+                line_down = sub_points[i]
+                line_up = sub_points[i + 1]
+
+                # 区域由四条线段围成：
+                # 上边界：当前细分线（line_current）
+                # 下边界：下一条细分线（line_next）
+                # 左侧边：当前线的起点到下一条线的起点
+                # 右侧边：当前线的终点到下一条线的终点
+
+                # # 构建区域的多边形顶点（按顺序）
+                # # 顺序：当前线起点 -> 当前线终点 -> 下一条线终点 -> 下一条线起点
+                # polygon_points = [
+                #     line_current['start_point'],  # 当前线起点
+                #     line_current['end_point'],  # 当前线终点
+                #     line_next['end_point'],  # 下一条线终点
+                #     line_next['start_point']  # 下一条线起点
+                # ]
+                #
+                # # 计算区域中心点（用于快速定位）
+                # center_lat = sum(p[0] for p in polygon_points) / 4
+                # center_lon = sum(p[1] for p in polygon_points) / 4
+
+                areas.append({
+                    'area_index': i,
+                    'up_line_index': i,  # 上边界线索引
+                    'down_line_index': i + 1,  # 下边界线索引
+                    'line_down': line_down,
+                    'line_up': line_up,
+                    # 'up_km': line_current['km'],  # 上边界里程
+                    # 'down_km': line_next['km'],  # 下边界里程
+                    # 'polygon': polygon_points,  # 区域多边形顶点
+                    # 'center': (center_lat, center_lon)  # 区域中心点
+                })
+
+            self.subdivision_areas[region_id] = areas
 
         print(f"完成了 {len(self.subregions)} 个区域的细分，每个区域 {self.subdivision_count + 1} 个细分点")
 
@@ -234,7 +305,25 @@ class MileageRegionManager:
 
         return None
 
+    def get_subdivision_area_by_index(self, region_id: str, area_index: int) -> Optional[Dict]:
+        """
+        根据索引获取细分区域
 
+        Args:
+            region_id: 区域ID
+            area_index: 细分区域索引（0 到 subdivision_count-1）
+
+        Returns:
+            细分区域信息
+        """
+        if region_id not in self.subdivision_areas:
+            return None
+
+        areas = self.subdivision_areas[region_id]
+        if 0 <= area_index < len(areas):
+            return areas[area_index]
+
+        return None
 
     def determine_ship_direction(self, ship_lat: float, ship_lon: float,
                                         ship_heading: float, target_region) -> str:
@@ -244,14 +333,14 @@ class MileageRegionManager:
         # 只向前方发射射线
         forward_up = self.line_intersection_with_direction(
             (ship_lat, ship_lon), ship_heading,
-            target_region['up_point'],
-            target_region['down_point']
+            target_region['line_up']['start_point'],
+            target_region['line_up']['end_point']
         )
 
         forward_down = self.line_intersection_with_direction(
             (ship_lat, ship_lon), ship_heading,
-            target_region['up_point'],
-            target_region['down_point']
+            target_region['line_down']['start_point'],
+            target_region['line_down']['end_point']
         )
 
         # 判断逻辑：
@@ -271,14 +360,14 @@ class MileageRegionManager:
         # 如果没有交点，尝试后方射线
         backward_up = self.line_intersection_with_direction(
             (ship_lat, ship_lon), (ship_heading + 180) % 360,
-            target_region['up_point'],
-            target_region['down_point']
+            target_region['line_up']['start_point'],
+            target_region['line_up']['end_point']
         )
 
         backward_down = self.line_intersection_with_direction(
             (ship_lat, ship_lon), (ship_heading + 180) % 360,
-            target_region['up_point'],
-            target_region['down_point']
+            target_region['line_down']['start_point'],
+            target_region['line_down']['end_point']
         )
 
         if backward_up and not backward_down:
@@ -393,30 +482,21 @@ class MileageRegionManager:
         # 计算船舶到每个细分点的距离
         best_index = 0
         best_distance = float('inf')
-        best_point_type = 'up'
+
 
         for i, point_info in enumerate(sub_points):
-            # 计算到上游细分点的距离
-            dist_up = haversine_distance(
-                lat, lon,
-                point_info['up_point'][0], point_info['up_point'][1]
-            )
+            # 计算到线段的距离
 
             # 计算到下游细分点的距离
-            dist_down = haversine_distance(
-                lat, lon,
-                point_info['down_point'][0], point_info['down_point'][1]
+            dist_down = point_to_line_distance(
+                (lat, lon),
+                point_info['start_point'], point_info['end_point']
             )
-
-            if dist_up < best_distance:
-                best_distance = dist_up
-                best_index = i
-                best_point_type = 'up'
 
             if dist_down < best_distance:
                 best_distance = dist_down
                 best_index = i
-                best_point_type = 'down'
+
 
         # 3. 计算里程和偏移
         km_range = target_region.km_range
@@ -427,7 +507,7 @@ class MileageRegionManager:
         estimated_km = km_range[0] + t * total_km
 
 
-        self.upBoardkm=estimated_km
+        self.up_bound_km=estimated_km
         return None
 
     def find_ship_position(self, ship_lat: float, ship_lon: float,
@@ -484,28 +564,17 @@ class MileageRegionManager:
         best_point_type = 'up'
 
         for i, point_info in enumerate(sub_points):
-            # 计算到上游细分点的距离
-            dist_up = haversine_distance(
-                ship_lat, ship_lon,
-                point_info['up_point'][0], point_info['up_point'][1]
+            dist = point_to_line_distance(
+                (ship_lat, ship_lon),
+                point_info['start_point'],
+                point_info['end_point']
             )
 
-            # 计算到下游细分点的距离
-            dist_down = haversine_distance(
-                ship_lat, ship_lon,
-                point_info['down_point'][0], point_info['down_point'][1]
-            )
-
-            if dist_up < best_distance:
-                best_distance = dist_up
+            if dist < best_distance:
+                best_distance = dist
                 best_index = i
-                best_point_type = 'up'
 
-            if dist_down < best_distance:
-                best_distance = dist_down
-                best_index = i
-                best_point_type = 'down'
-
+        region_sub_points = self.get_subdivision_area_by_index(region_id,best_index)
         # 3. 计算里程和偏移
         km_range = target_region.km_range
         total_km = km_range[1] - km_range[0]
@@ -515,26 +584,13 @@ class MileageRegionManager:
         estimated_km = km_range[0] + t * total_km
 
 
-        # # 计算到最近里程线的横向偏移
-        # if best_point_type == 'up':
-        #     line = target_region.upstream_line
-        # else:
-        #     line = target_region.downstream_line
-        #
-        # lateral_offset = point_to_line_distance(
-        #     (ship_lat, ship_lon),
-        #     line.start_point,
-        #     line.end_point
-        # )
 
         # 4. 判断船舶的上下水方向
         direction = 'unknown'
         if ship_heading is not None:
             direction = self.determine_ship_direction(
-                ship_lat, ship_lon, ship_heading,sub_points[best_index]
+                ship_lat, ship_lon, ship_heading,region_sub_points
             )
-
-
 
         result = {
             'region_id': region_id,
@@ -543,8 +599,6 @@ class MileageRegionManager:
             'estimated_km': estimated_km,  # 估计的里程数
             'subdivision_index': best_index,  # 细分索引
             'subdivision_t': t,  # 细分参数
-            'nearest_line_type': best_point_type,  # 最近的是上游线还是下游线
-            'distance_to_line': best_distance,  # 到最近线的距离
             'direction': direction,  # 上下水方向
         }
 
@@ -592,3 +646,55 @@ class MileageRegionManager:
         t = index / self.subdivision_count
 
         return km_range[0] + t * (km_range[1] - km_range[0])
+
+    def visualize_subdivision(self):
+        """
+        可视化细分结果，用于验证
+        需要 matplotlib 支持
+        """
+        import matplotlib.pyplot as plt
+
+        for region_id, sub_lines in self.subregions.items():
+            # 找到对应的区域
+            region = None
+            for r in self.mileage_regions:
+                if r.region_id == region_id:
+                    region = r
+                    break
+
+            if not region:
+                continue
+
+            fig, ax = plt.subplots(figsize=(12, 10))
+
+            # 绘制上游线（红色）
+            up_start = region.upstream_line.start_point
+            up_end = region.upstream_line.end_point
+            ax.plot([up_start[1], up_end[1]], [up_start[0], up_end[0]], 'r-', linewidth=3, label='上游线')
+
+            # 绘制下游线（蓝色）
+            down_start = region.downstream_line.start_point
+            down_end = region.downstream_line.end_point
+            ax.plot([down_start[1], down_end[1]], [down_start[0], down_end[0]], 'b-', linewidth=3, label='下游线')
+
+            # 绘制细分线（绿色，每隔50条画一条）
+            for i, line_info in enumerate(sub_lines):
+                if i % 20 == 0 or i == len(sub_lines) - 1:
+                    start = line_info['start_point']
+                    end = line_info['end_point']
+                    ax.plot([start[1], end[1]], [start[0], end[0]], 'g-', linewidth=1, alpha=0.5)
+                    # 标注里程
+                    if i % 100 == 0:
+                        mid_lat = (start[0] + end[0]) / 2
+                        mid_lon = (start[1] + end[1]) / 2
+                        ax.text(mid_lon, mid_lat, f'{line_info["km"]:.1f}km', fontsize=8, ha='center')
+
+            ax.set_xlabel('经度')
+            ax.set_ylabel('纬度')
+            ax.set_title(f'里程区域细分 - {region_id}')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.show()
+
+            # break  # 只显示第一个区域
