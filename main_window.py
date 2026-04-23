@@ -11,6 +11,8 @@ import os
 from PyQt5.QtWebEngineWidgets import QWebEngineSettings
 
 from APIManager import APIManager,APIService
+from led_manager import LEDManager
+from led_widget import LEDWidget
 from mapBridge import MapBridge
 from mileage_region_manager import MileageRegionManager
 from passage_record_edit_dialog import PassageRecordEditDialog
@@ -25,7 +27,7 @@ os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLineEdit, QLabel, QMessageBox)
+                             QLineEdit, QLabel, QMessageBox, QGridLayout)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, pyqtSignal, QObject, Qt, center, QTimer, QDateTime
 from PyQt5.QtWebChannel import QWebChannel
@@ -201,8 +203,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 设置 WebChannel
         self.setup_web_channel()
 
+        # 初始化LED管理器
+        self.led_manager = LEDManager(self.db_manager, self.mqtt_widget.mqtt_manager)
 
+        # 初始化LED相关变量
+        self.led_widgets = []  # 存储LED控件
+        self.led_layout = None  # LED布局
 
+        # 假设你的 QWidget 名字是 widget_led_container
+        self.init_led_container()
+
+        # 连接LED状态变化信号
+        self.led_manager.led_status_changed.connect(self.on_led_status_changed)
         # self.mqtt_widget.show()
 
     # 在主窗口初始化时设置
@@ -220,6 +232,122 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 设置到 webView
         self.webView.page().setWebChannel(self.channel)
+
+    def init_led_container(self):
+        """初始化LED容器"""
+        # 获取LED容器
+        self.led_container = self.widget_led_container
+
+        # 确保容器可见并设置大小策略
+        self.led_container.setVisible(True)
+        self.led_container.setMinimumHeight(180)  # 设置最小高度
+        self.led_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        # 清除现有布局
+        old_layout = self.led_container.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            # 删除旧布局
+            from PyQt5.QtWidgets import QWidget
+            QWidget().setLayout(old_layout)
+
+        # 创建水平布局
+        self.led_layout = QHBoxLayout(self.led_container)
+        self.led_layout.setSpacing(15)
+        self.led_layout.setContentsMargins(10, 10, 10, 10)
+        self.led_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        # 默认隐藏容器
+        self.led_container.setVisible(False)
+
+    def load_leds_for_reach(self, reachcode: str):
+        """
+        加载控制河段的LED灯
+
+        Args:
+            reachcode: 控制河段代码
+        """
+        try:
+            # 获取LED列表
+            leds = self.led_manager.load_leds_by_reachcode(reachcode)
+
+            print(f"查询到LED数量: {len(leds)}")
+            for led in leds:
+                print(f"  - LED: {led.led_name}, ID: {led.led_id}")
+
+            # 清空现有LED控件
+            for widget in self.led_widgets:
+                widget.deleteLater()
+            self.led_widgets.clear()
+
+            # 清除布局中的所有控件
+            if self.led_layout:
+                while self.led_layout.count():
+                    item = self.led_layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+
+            # 如果没有LED，隐藏容器
+            if not leds:
+                self.led_container.setVisible(False)
+                print("没有LED灯需要显示")
+                return
+
+            # 最多显示4个
+            display_leds = leds[:4]
+
+            # 显示容器
+            self.led_container.setVisible(True)
+
+            # 调试：检查容器状态
+            print(f"容器可见性: {self.led_container.isVisible()}")
+            print(f"容器大小: {self.led_container.size().width()} x {self.led_container.size().height()}")
+            print(f"容器几何: {self.led_container.geometry()}")
+
+            # 创建LED控件并添加到水平布局
+            for i, led in enumerate(display_leds):
+                # 创建LED控件
+                led_widget = LEDWidget(led, self.led_manager, self)
+                self.led_widgets.append(led_widget)
+
+                # 添加到水平布局
+                self.led_layout.addWidget(led_widget)
+
+                # 调试：检查控件状态
+                print(
+                    f"LED {i + 1}: {led.led_name}, 可见: {led_widget.isVisible()}, 大小: {led_widget.size().width()}x{led_widget.size().height()}")
+
+            # 如果不足4个，添加弹性空间
+            if len(display_leds) < 4:
+                self.led_layout.addStretch()
+
+            # 强制更新布局
+            self.led_container.update()
+            self.led_container.repaint()
+
+            print(f"加载了 {len(display_leds)} 个LED灯（水平布局）")
+
+        except Exception as e:
+            print(f"加载LED灯失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def on_led_status_changed(self, led_id: int, status: int):
+        """LED状态变化回调"""
+        # 更新对应的LED控件显示
+        for widget in self.led_widgets:
+            if widget.led_info.led_id == led_id:
+                widget.update_status_display(status)
+                break
+
+        # 记录日志
+        led = self.led_manager.leds.get(led_id)
+        if led:
+            status_texts = {0: "禁航", 1: "上水", 2: "下水", 3: "半杆", 4: "关闭"}
+            self.log_message(f"LED状态变化: {led.led_name} -> {status_texts.get(status, '未知')}")
 
     def edit_ship_passage_record(self, mmsi: str,name:str):
         """
@@ -634,7 +762,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if reach_name:
             print(f"对应的TeachCode: {self.reachCode}")
-
+            # 加载LED灯
+            self.load_leds_for_reach(self.reachCode)
             # 在这里进行你的初始化操作
             self.initialize_with_reach_data(reach_name, self.reachCode)
         else:
@@ -653,6 +782,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global json
         print(f"开始初始化 - 河段: {reach_name}, TeachCode: {teach_code}")
 
+        # 1. 先暂停 MQTT 处理
+        if hasattr(self, 'mqtt_widget'):
+            self.mqtt_widget.pause_processing(True)
         try:
             # 查询Reaches表
             query = """
@@ -766,10 +898,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             print(f"成功加载河段: {reach_name}")
             self.load_mqtt_topic()
+
+            # 4. 恢复 MQTT 处理
+            if hasattr(self, 'mqtt_widget'):
+                self.mqtt_widget.pause_processing(False)
             return None
 
 
         except Exception as e:
+            # 出错时也要恢复 MQTT 处理
+            if hasattr(self, 'mqtt_widget'):
+                self.mqtt_widget.pause_processing(False)
             print(f"加载河段数据失败: {e}")
             import traceback
             traceback.print_exc()

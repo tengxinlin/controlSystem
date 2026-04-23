@@ -359,6 +359,9 @@ class MQTTControlWidget(QWidget):
     def on_message_received(self, topic, message):
         """接收到消息"""
         # 在日志中显示
+        # 如果暂停处理，直接返回
+        if self.pause_processing:
+            return
         try:
             # 如果是JSON，格式化显示
             data = json.loads(message)
@@ -502,6 +505,14 @@ class MQTTControlWidget(QWidget):
     def get_ships_by_direction(self, direction):
         """按方向获取船舶"""
         return self.ship_manager.get_ships_by_direction(direction)
+
+    def pause_processing(self, pause: bool):
+        """暂停/恢复 MQTT 消息处理"""
+        if hasattr(self, 'mqtt_manager'):
+            self.mqtt_manager.pause_processing = pause
+            status = "暂停" if pause else "恢复"
+            self.log_text.append(f"⏸️ MQTT 消息处理已{status}")
+            print(f"MQTT 消息处理已{status}")
 
 
 class MainApplication(QMainWindow):

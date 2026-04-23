@@ -7,7 +7,46 @@ from PyQt5.QtCore import QObject, pyqtSignal, QThread, pyqtSlot
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from urllib.parse import urljoin
 import time
+import base64
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
+
+def aes_encrypt(data: str, key: str='1234567890123456', iv: str = '1234567890123456') -> str:
+    """
+    AES加密函数
+
+    Args:
+        data: 待加密的字符串
+        key: 密钥（16/24/32字节，对应AES-128/192/256）
+        iv: 初始化向量（16字节，可选，默认使用密钥前16字节）
+
+    Returns:
+        Base64编码的加密结果
+    """
+    # 将密钥转换为字节
+    key_bytes = key.encode('utf-8')
+
+    # 如果密钥长度不符合要求，进行填充或截断
+    if len(key_bytes) < 16:
+        key_bytes = key_bytes.ljust(16, b'\0')
+    elif len(key_bytes) > 32:
+        key_bytes = key_bytes[:32]
+
+    # 处理IV
+    if iv:
+        iv_bytes = iv.encode('utf-8')[:16].ljust(16, b'\0')
+    else:
+        iv_bytes = key_bytes[:16]
+
+    # 创建AES cipher对象（CBC模式）
+    cipher = AES.new(key_bytes, AES.MODE_CBC, iv_bytes)
+
+    # 加密数据（需要填充到16的倍数）
+    encrypted_bytes = cipher.encrypt(pad(data.encode('utf-8'), AES.block_size))
+
+    # 返回Base64编码的结果
+    return base64.b64encode(encrypted_bytes).decode('utf-8')
 
 def md5_encrypt(password: str) -> str:
     """
@@ -116,7 +155,7 @@ class APIManager(QObject):
             # 准备登录数据
             login_data = {
                 'accounter': username,
-                'password': md5_encrypt(password)
+                'password': aes_encrypt(password)
             }
 
             if extra_data:

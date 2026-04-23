@@ -66,6 +66,8 @@ class MQTTManager(QObject):
         # 初始化客户端
         self._init_client()
 
+        self.pause_processing = False  # 暂停处理标志
+
     def _init_client(self):
         """初始化MQTT客户端"""
         client_id = self.config.client_id or f"pyqt_mqtt_{int(time.time())}"
@@ -144,6 +146,9 @@ class MQTTManager(QObject):
 
     def _on_message(self, client, userdata, msg):
         """消息接收回调"""
+        # 如果暂停处理，直接返回
+        if self.pause_processing:
+            return
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
