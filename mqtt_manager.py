@@ -63,10 +63,13 @@ class MQTTManager(QObject):
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 5
 
+        # 存储待订阅的主题列表
+        self.pending_subscriptions = []  # 存储 (topic, qos) 元组
+
         # 初始化客户端
         self._init_client()
 
-        self.pause_processing = False  # 暂停处理标志
+
 
     def _init_client(self):
         """初始化MQTT客户端"""
@@ -110,10 +113,13 @@ class MQTTManager(QObject):
             self.signals.connected.emit()#mqtt连接成功的信号发射
             self.signals.log_message.emit("✅ MQTT连接成功")
 
-            # 重新订阅之前订阅的主题
-            for topic, qos in self.subscribed_topics.items():
+            # 连接成功后，订阅所有待订阅的主题
+            for topic, qos in self.pending_subscriptions:
                 self.client.subscribe(topic, qos)
-                self.signals.log_message.emit(f"重新订阅主题: {topic}")
+                self.signals.log_message.emit(f"订阅主题: {topic} (QoS: {qos})")
+
+            # 清空待订阅列表
+            self.pending_subscriptions.clear()
 
         else:
             error_msg = f"连接失败，返回码: {rc}"
@@ -146,9 +152,7 @@ class MQTTManager(QObject):
 
     def _on_message(self, client, userdata, msg):
         """消息接收回调"""
-        # 如果暂停处理，直接返回
-        if self.pause_processing:
-            return
+
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
@@ -279,8 +283,11 @@ class MQTTManager(QObject):
             qos: 服务质量等级
             callback: 收到消息时的回调函数
         """
+
         if not self.is_connected:
-            self.signals.log_message.emit("❌ 未连接，无法订阅")
+            # 存储待订阅主题
+            self.pending_subscriptions.append((topic, qos))
+            self.signals.log_message.emit("❌ 未连接，无法订阅，暂存到待订阅主题")
             return False
 
         try:

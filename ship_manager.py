@@ -423,6 +423,14 @@ class ShipManager(QObject):
             包含位置和方向信息的字典
 
         """
+
+        # 检查必要的对象是否存在
+        if not hasattr(self, 'current_reach') or self.current_reach is None:
+            return {}
+
+        if not hasattr(self, 'mileage_manager') or self.mileage_manager is None:
+            return {}
+
         # 计算航道位置和方向
         pos_info = self.mileage_manager.find_ship_position(
             ship_lat, ship_lon, ship_heading

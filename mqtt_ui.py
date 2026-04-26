@@ -359,9 +359,7 @@ class MQTTControlWidget(QWidget):
     def on_message_received(self, topic, message):
         """接收到消息"""
         # 在日志中显示
-        # 如果暂停处理，直接返回
-        if self.pause_processing:
-            return
+
         try:
             # 如果是JSON，格式化显示
             data = json.loads(message)

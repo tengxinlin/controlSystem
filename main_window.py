@@ -89,24 +89,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             layout = frame.layout()
 
-        # 创建MQTT控件
+        # 创建新的MQTT控件
         self.mqtt_widget = MQTTControlWidget(api_service)
-        # 设置窗口关闭事件（重写closeEvent，让关闭变成隐藏）
-        self.mqtt_widget.setAttribute(Qt.WA_DeleteOnClose, False)  # 关闭时不删除对象
-        self.mqtt_widget.setWindowFlags(self.mqtt_widget.windowFlags() | Qt.Window)  # 确保是独立窗口
-
-       
         # 连接按钮信号
         self.mqtt_btn.clicked.connect(self.show_mqtt_widget)
-
 
         #创建地图船舶绘制器
         self.ship_drawer = None
 
-        # 连接MQTT控件的AIS信号
-        self.mqtt_widget.ship_manager.ship_updated.connect(self.on_ais_ships_updated)
-        self.mqtt_widget.ship_manager.ship_removed.connect(self.on_ais_ships_remove)
-        self.mqtt_widget.ship_manager.update_queue_status.connect(self.update_queue_status)
+
 
         # 创建WebEngineView
         self.webView = QWebEngineView()
@@ -198,8 +189,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.comboBox.currentTextChanged.connect(self.on_reach_selected)
         self.load_reach_data(self.controlRivername)
 
-        self.loadMap()
-
         # 设置 WebChannel
         self.setup_web_channel()
 
@@ -216,6 +205,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 连接LED状态变化信号
         self.led_manager.led_status_changed.connect(self.on_led_status_changed)
         # self.mqtt_widget.show()
+
+        #初始化后选择combox
+        river = self.db_manager.search_records("Reaches", {"ReachCode": self.reachCode})
+        # 使用 split() 分割字符串
+        longitude, latitude = river[0].get("CenterP").split(',')
+        self.comboBox.setCurrentText("0")
+        self.comboBox.setCurrentText(river[0].get("ReachName"))
 
     # 在主窗口初始化时设置
     def setup_web_channel(self):
@@ -539,7 +535,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from map_ship_drawer import MapShipDrawer
         self.ship_drawer = MapShipDrawer(self.webView)
 
-        # 当页面加载完成后，设置地图中心点和缩放
+        # 当页面加载完成后，设置地图
         self.webView.loadFinished.connect(self.on_load_finished)
 
     def inject_webchannel_js(self):
@@ -582,13 +578,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                             console.log('WebChannel 未初始化');
                         }
                     """)
-            river=self.db_manager.search_records("Reaches",{"ReachCode":self.reachCode})
-            # 使用 split() 分割字符串
-            longitude, latitude = river[0].get("CenterP").split(',')
-            self.comboBox.setCurrentText("0")
-            self.comboBox.setCurrentText(river[0].get("ReachName"))
-            js = f"setMapView({latitude}, {longitude}, {14});"
-            self.webView.page().runJavaScript(js)
+            # 在这里进行你的初始化操作
+            self.initialize_with_reach_data(self.controlRivername,self.reachCode)
+
         else:
             print("页面加载失败")
 
@@ -762,10 +754,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if reach_name:
             print(f"对应的TeachCode: {self.reachCode}")
+
+            # 1. 关闭并删除旧的 MQTT 控件
+            if hasattr(self, 'mqtt_widget') and self.mqtt_widget:
+                if hasattr(self.mqtt_widget, 'mqtt_manager'):
+                    self.mqtt_widget.mqtt_manager.disconnect()
+                self.mqtt_widget.deleteLater()
+
+
+            self.loadMap()
+
             # 加载LED灯
             self.load_leds_for_reach(self.reachCode)
-            # 在这里进行你的初始化操作
-            self.initialize_with_reach_data(reach_name, self.reachCode)
+
+
+
+
+
         else:
             print(f"未找到河段 {reach_name} 对应的TeachCode")
 
@@ -782,9 +787,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global json
         print(f"开始初始化 - 河段: {reach_name}, TeachCode: {teach_code}")
 
-        # 1. 先暂停 MQTT 处理
-        if hasattr(self, 'mqtt_widget'):
-            self.mqtt_widget.pause_processing(True)
         try:
             # 查询Reaches表
             query = """
@@ -859,6 +861,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             reach.park_areas = park_areas
             reach.special_areas = special_areas
 
+            # 在函数末尾添加
+            self.current_reach = reach  # 保存当前河段
+
            #根据界限标和鸣笛标区计算获取区域
             reach.__post_init__()
 
@@ -871,17 +876,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 cleared_count = self.queue_manager.clear_all_queues()
                 print(f"已清空队列，共 {cleared_count} 艘船舶")
 
-            # 创建或更新ShipManager
-            if not hasattr(self.mqtt_widget, 'ship_manager'):
-                from ship_manager import ShipManager
-                self.mqtt_widget.ship_manager = ShipManager(self.api,self.mileage_manager,reach,self.queue_manager)  # 传入依赖
+            # 创建新的MQTT控件
+            self.mqtt_widget = MQTTControlWidget(api_service)
+            # 设置窗口关闭事件（重写closeEvent，让关闭变成隐藏）
+            self.mqtt_widget.setAttribute(Qt.WA_DeleteOnClose, False)  # 关闭时不删除对象
+            self.mqtt_widget.setWindowFlags(self.mqtt_widget.windowFlags() | Qt.Window)  # 确保是独立窗口
 
-            else:
-                self.mqtt_widget.ship_manager.set_mileage_manager(self.mileage_manager,reach,self.queue_manager)  # 更新依赖
+            # 5. 设置新的 ShipManager
+            from ship_manager import ShipManager
+            self.mqtt_widget.ship_manager = ShipManager(
+                self.api,
+                self.mileage_manager,
+                self.current_reach,
+                self.queue_manager
+            )
 
-            # 在函数末尾添加
-            self.current_reach = reach  # 保存当前河段
+            # 连接MQTT控件的AIS信号
+            self.mqtt_widget.ship_manager.ship_updated.connect(self.on_ais_ships_updated)
+            self.mqtt_widget.ship_manager.ship_removed.connect(self.on_ais_ships_remove)
+            self.mqtt_widget.ship_manager.update_queue_status.connect(self.update_queue_status)
 
+            # 6. 连接 MQTT
+            self.mqtt_widget.mqtt_manager.connect()
+            self.load_mqtt_topic()
+
+            print("MQTT 控件已重新创建并连接")
 
 
             js = f"setMapView({reach.center_point.lat}, {reach.center_point.lon}, {14});"
@@ -897,18 +916,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"河段 {reach.reach_name} 绘制完成")
 
             print(f"成功加载河段: {reach_name}")
-            self.load_mqtt_topic()
 
-            # 4. 恢复 MQTT 处理
-            if hasattr(self, 'mqtt_widget'):
-                self.mqtt_widget.pause_processing(False)
+
             return None
-
-
         except Exception as e:
-            # 出错时也要恢复 MQTT 处理
-            if hasattr(self, 'mqtt_widget'):
-                self.mqtt_widget.pause_processing(False)
             print(f"加载河段数据失败: {e}")
             import traceback
             traceback.print_exc()

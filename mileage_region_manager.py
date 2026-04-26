@@ -330,6 +330,11 @@ class MileageRegionManager:
         """
         简化的射线法方向判断
         """
+        # 添加空值检查
+        if target_region is None:
+            print("目标区域为空，无法判断方向")
+            return 'unknown'
+
         # 只向前方发射射线
         forward_up = self.line_intersection_with_direction(
             (ship_lat, ship_lon), ship_heading,
