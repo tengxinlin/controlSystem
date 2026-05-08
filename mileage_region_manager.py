@@ -91,7 +91,7 @@ class MileageRegionManager:
             km2 = sorted_kms[i + 1]
 
             # 确定上下游
-            # 假设km越小越靠近上游
+            # 假设km越大越靠近上游
             if km1 > km2:
                 upstream_line = self.mileage_lines[km1]
                 downstream_line = self.mileage_lines[km2]
@@ -99,10 +99,24 @@ class MileageRegionManager:
                 upstream_line = self.mileage_lines[km2]
                 downstream_line = self.mileage_lines[km1]
 
+            # 构建区域多边形（四个顶点）
+            up_start = upstream_line.start_point
+            up_end = upstream_line.end_point
+            down_start = downstream_line.start_point
+            down_end = downstream_line.end_point
+
+            #
+            polygon = [up_start, up_end, down_end, down_start]
+
+            # 验证多边形有效性
+            if not is_rectangle_polygon_valid(polygon):
+                polygon = [up_start, up_end, down_start, down_end]
+
             region = MileageRegion(
                 upstream_line=upstream_line,
                 downstream_line=downstream_line,
-                region_id=f"{upstream_line.km:.1f}_{downstream_line.km:.1f}"
+                region_id=f"{downstream_line.km:.1f}_{upstream_line.km:.1f}",
+                polygon=polygon  # 添加多边形
             )
 
             self.mileage_regions.append(region)
@@ -165,13 +179,21 @@ class MileageRegionManager:
             for i in range(self.subdivision_count + 1):
                 t = i / self.subdivision_count  # 插值参数 0~1
 
-                # 起点之间的插值（上游起点 -> 下游起点）
-                start_lat = up_start[0] + t * (matched_down_start[0] - up_start[0])
-                start_lon = up_start[1] + t * (matched_down_start[1] - up_start[1])
+                # # 起点之间的插值（上游起点 -> 下游起点）
+                # start_lat = up_start[0] + t * (matched_down_start[0] - up_start[0])
+                # start_lon = up_start[1] + t * (matched_down_start[1] - up_start[1])
 
-                # 终点之间的插值（上游终点 -> 下游终点）
-                end_lat = up_end[0] + t * (matched_down_end[0] - up_end[0])
-                end_lon = up_end[1] + t * (matched_down_end[1] - up_end[1])
+                # 起点之间的插值（下游起点 -> 上游起点）
+                start_lat = matched_down_start[0] + t * (up_start[0] - matched_down_start[0])
+                start_lon = matched_down_start[1] + t * (up_start[1] - matched_down_start[1])
+
+                # # 终点之间的插值（上游终点 -> 下游终点）
+                # end_lat = up_end[0] + t * (matched_down_end[0] - up_end[0])
+                # end_lon = up_end[1] + t * (matched_down_end[1] - up_end[1])
+
+                # 终点之间的插值（下游终点 -> 上游终点）
+                end_lat = matched_down_end[0] + t * (up_end[0] - matched_down_end[0])
+                end_lon = matched_down_end[1] + t * (up_end[1] - matched_down_end[1])
 
                 # 保存当前细分位置的线段（两个端点）
                 sub_points.append({
@@ -179,7 +201,7 @@ class MileageRegionManager:
                     't': t,
                     'start_point': (start_lat, start_lon),  # 靠近起点侧的点
                     'end_point': (end_lat, end_lon),  # 靠近终点侧的点,
-                    'km': region.upstream_km + t * (region.downstream_km - region.upstream_km)  # 对应的里程数
+                    'km': region.downstream_km + t * (region.upstream_km - region.downstream_km)  # 对应的里程数
                 })
 
             self.subregions[region_id] = sub_points
@@ -211,8 +233,8 @@ class MileageRegionManager:
 
                 areas.append({
                     'area_index': i,
-                    'up_line_index': i,  # 上边界线索引
-                    'down_line_index': i + 1,  # 下边界线索引
+                    'up_line_index': i+1,  # 上边界线索引
+                    'down_line_index': i,  # 下边界线索引
                     'line_down': line_down,
                     'line_up': line_up,
                     # 'up_km': line_current['km'],  # 上边界里程
@@ -530,54 +552,40 @@ class MileageRegionManager:
         """
         # 1. 找到船舶所在的区域
         target_region = None
-        min_distance = float('inf')
+
 
         for region in self.mileage_regions:
-            # 计算到上游线和下游线的距离
-            dist_up = point_to_line_distance(
-                (ship_lat, ship_lon),
-                region.upstream_line.start_point,
-                region.upstream_line.end_point
-            )
-
-            dist_down = point_to_line_distance(
-                (ship_lat, ship_lon),
-                region.downstream_line.start_point,
-                region.downstream_line.end_point
-            )
-
-            # 取较小的距离作为到该区域的距离
-            distance = min(dist_up, dist_down)
-
-            if distance < min_distance:
-                min_distance = distance
+            if region.contains_point(ship_lat, ship_lon):
                 target_region = region
-
+                break
         if not target_region:
-            return None
+            return {}
 
         # 2. 在目标区域的细分点中找到最近的索引
         region_id = target_region.region_id
-        sub_points = self.subregions.get(region_id, [])
+        sub_areas = self.subdivision_areas.get(region_id, [])
 
-        if not sub_points:
-            return None
+        if not sub_areas:
+            return {}
 
-        # 计算船舶到每个细分点的距离
+            # 查找船舶所在的细分区域
+        target_sub_area = None
         best_index = 0
-        best_distance = float('inf')
-        best_point_type = 'up'
 
-        for i, point_info in enumerate(sub_points):
-            dist = point_to_line_distance(
-                (ship_lat, ship_lon),
-                point_info['start_point'],
-                point_info['end_point']
-            )
+        for i, area_info in enumerate(sub_areas):
+            # 构建细分区域的多边形
+            sub_polygon = [
+                area_info['line_up']['start_point'],
+                area_info['line_up']['end_point'],
+                area_info['line_down']['end_point'],
+                area_info['line_down']['start_point']
+            ]
 
-            if dist < best_distance:
-                best_distance = dist
+            if point_in_polygon((ship_lat, ship_lon), sub_polygon):
+                target_sub_area = area_info
                 best_index = i
+                break
+
 
         region_sub_points = self.get_subdivision_area_by_index(region_id,best_index)
         # 3. 计算里程和偏移
@@ -703,3 +711,101 @@ class MileageRegionManager:
             plt.show()
 
             # break  # 只显示第一个区域
+
+
+def point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, float]]) -> bool:
+        """
+        判断点是否在多边形内（射线法）
+
+        Args:
+            point: 待判断的点 (lat, lon)
+            polygon: 多边形顶点列表 [(lat, lon), ...]
+
+        Returns:
+            True 如果在多边形内
+        """
+        x, y = point
+        inside = False
+        n = len(polygon)
+
+        for i in range(n):
+            x1, y1 = polygon[i]
+            x2, y2 = polygon[(i + 1) % n]
+
+            # 检查射线是否与边相交
+            if ((y1 > y) != (y2 > y)) and (x < (x2 - x1) * (y - y1) / (y2 - y1) + x1):
+                inside = not inside
+
+        return inside
+
+import math
+from typing import List, Tuple
+
+def is_rectangle_polygon_valid(polygon: List[Tuple[float, float]]) -> bool:
+    """
+    验证矩形多边形是否有效（4个点，无交叉）
+
+    Args:
+        polygon: 多边形顶点列表
+
+    Returns:
+        是否有效
+    """
+    if len(polygon) != 4:
+        print(f"矩形多边形点数不正确: {len(polygon)}")
+        return False
+
+    # 检查是否有重复点
+    for i in range(4):
+        for j in range(i + 1, 4):
+            if polygon[i] == polygon[j]:
+                print(f"矩形多边形有重复点: {polygon[i]}")
+                return False
+
+    # 检查边是否相交（矩形不应该有对角线相交）
+    # 检查边 (0-1) 和 (2-3) 是否相交（应该不相交）
+    if segments_intersect(polygon[0], polygon[1], polygon[2], polygon[3]):
+        print("矩形多边形边 (0-1) 和 (2-3) 相交")
+        return False
+
+    # 检查边 (1-2) 和 (3-0) 是否相交（应该不相交）
+    if segments_intersect(polygon[1], polygon[2], polygon[3], polygon[0]):
+        print("矩形多边形边 (1-2) 和 (3-0) 相交")
+        return False
+
+    return True
+
+
+def segments_intersect(p1: Tuple[float, float], p2: Tuple[float, float],
+                       p3: Tuple[float, float], p4: Tuple[float, float]) -> bool:
+    """
+    判断两条线段是否相交（包括端点）
+    """
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    def on_segment(p, q, r):
+        return (min(p[0], r[0]) <= q[0] <= max(p[0], r[0]) and
+                min(p[1], r[1]) <= q[1] <= max(p[1], r[1]))
+
+    d1 = cross(p3, p4, p1)
+    d2 = cross(p3, p4, p2)
+    d3 = cross(p1, p2, p3)
+    d4 = cross(p1, p2, p4)
+
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+            ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+        return True
+
+    # 检查端点在线段上的情况
+    if d1 == 0 and on_segment(p3, p1, p4):
+        return True
+    if d2 == 0 and on_segment(p3, p2, p4):
+        return True
+    if d3 == 0 and on_segment(p1, p3, p2):
+        return True
+    if d4 == 0 and on_segment(p1, p4, p2):
+        return True
+
+    return False

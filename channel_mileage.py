@@ -32,6 +32,7 @@ class MileageRegion:
     upstream_line: MileageLine  # 上游里程线
     downstream_line: MileageLine  # 下游里程线
     region_id: str = ""  # 区域标识
+    polygon: List[Tuple[float, float]] = None  # 区域多边形顶点
 
     @property
     def upstream_km(self) -> float:
@@ -44,8 +45,40 @@ class MileageRegion:
     @property
     def km_range(self) -> Tuple[float, float]:
         """里程范围（从小到大）"""
-        return sorted([self.upstream_km, self.downstream_km])
+        return sorted([self.downstream_km, self.upstream_km])
 
+    def contains_point(self, lat: float, lon: float) -> bool:
+        """判断点是否在这个区域的多边形内"""
+        if not self.polygon:
+            return False
+        return point_in_polygon((lat, lon), self.polygon)
+
+
+
+def point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, float]]) -> bool:
+    """
+    判断点是否在多边形内（射线法）
+
+    Args:
+        point: 待判断的点 (lat, lon)
+        polygon: 多边形顶点列表 [(lat, lon), ...]
+
+    Returns:
+        True 如果在多边形内
+    """
+    x, y = point
+    inside = False
+    n = len(polygon)
+
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+
+        # 检查射线是否与边相交
+        if ((y1 > y) != (y2 > y)) and (x < (x2 - x1) * (y - y1) / (y2 - y1) + x1):
+            inside = not inside
+
+    return inside
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """

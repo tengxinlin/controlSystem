@@ -44,11 +44,6 @@ class LEDWidget(QWidget):
         self.status_label.setFixedSize(50, 50)
         layout.addWidget(self.status_label)
 
-        # 状态文字
-        self.status_text = QLabel("关闭")
-        self.status_text.setAlignment(Qt.AlignCenter)
-        self.status_text.setStyleSheet("font-size: 12px; color: #666;")
-        layout.addWidget(self.status_text)
 
         # 控制按钮
         control_layout = QHBoxLayout()
@@ -101,9 +96,6 @@ class LEDWidget(QWidget):
                 min-height: 40px;
             """)
 
-        # 更新状态文字
-        status_texts = {0: "禁航", 1: "上水", 2: "下水", 3: "半杆", 4: "关闭"}
-        self.status_text.setText(status_texts.get(status, "未知"))
         self.status_combo.setCurrentIndex(status)
 
     def send_control(self):

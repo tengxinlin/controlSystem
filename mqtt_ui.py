@@ -361,29 +361,18 @@ class MQTTControlWidget(QWidget):
         # 在日志中显示
 
         try:
-            # 如果是JSON，格式化显示
-            data = json.loads(message)
-            formatted_msg = json.dumps(data, indent=2, ensure_ascii=False)[:100]
-
-            # 检查是否是AIS主题
-            if 'ais/dynamic' in topic.lower():
-                self.process_ais_message(topic, message)
-
-
-        except json.JSONDecodeError:
 
             # 不是JSON格式，作为普通文本处理
-
             formatted_msg = message[:200]
-
-            # 如果是AIS主题，但消息不是JSON，可能是纯文本格式的AIS数据
 
             # 检查是否是AIS主题
             if 'ais/dynamic' in topic.lower():
                 # 假设AIS消息可能是逗号分隔的文本格式
 
                 self.process_ais_message(topic, message)
-
+        except Exception as e:
+            print(f"处理消息时出错: {e}")
+            formatted_msg = message[:200]
         self.log_text.append(f"📩 [{topic}] {formatted_msg}")
 
 

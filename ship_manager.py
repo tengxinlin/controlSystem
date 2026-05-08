@@ -230,9 +230,14 @@ class ShipManager(QObject):
                 # 速度转换：节 -> 公里/分钟
                 # 1节 = 1.852公里/小时 = 1.852/60 ≈ 0.0308667公里/分钟
                 speed_km_per_min = speed * 1.852 / 60
-                km_diff=abs(position_and_direction.get('estimated_km') - self.mileage_manager.up_bound_km)
+
+                km_diff = None
+                if position_and_direction and position_and_direction.get('estimated_km') is not None:
+                    km_diff = abs(position_and_direction.get('estimated_km') - self.mileage_manager.up_bound_km)
+                else:
+                    print(f"船舶 {mmsi} 的 estimated_km 无效，跳过计算")
                 # 计算时间（分钟）
-                if speed_km_per_min:
+                if speed_km_per_min and km_diff:
                     time_minutes = km_diff / speed_km_per_min
                     position_and_direction['time_minutes']=round(time_minutes, 1) #保留一位小数
 
@@ -423,13 +428,6 @@ class ShipManager(QObject):
             包含位置和方向信息的字典
 
         """
-
-        # 检查必要的对象是否存在
-        if not hasattr(self, 'current_reach') or self.current_reach is None:
-            return {}
-
-        if not hasattr(self, 'mileage_manager') or self.mileage_manager is None:
-            return {}
 
         # 计算航道位置和方向
         pos_info = self.mileage_manager.find_ship_position(
