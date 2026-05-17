@@ -177,7 +177,7 @@
             </property>
             <layout class="QHBoxLayout" name="horizontalLayout_7">
              <item>
-              <widget class="QTableWidget" name="tableWidget_3">
+              <widget class="QTableWidget" name="tableWidget_pending">
                <property name="sortingEnabled">
                 <bool>false</bool>
                </property>
@@ -187,91 +187,6 @@
                <attribute name="horizontalHeaderDefaultSectionSize">
                 <number>60</number>
                </attribute>
-               <column>
-                <property name="text">
-                 <string>序号</string>
-                </property>
-                <property name="font">
-                 <font>
-                  <kerning>true</kerning>
-                 </font>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>船名</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>航向</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>实时时间</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>拟揭示信号</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>是否到位</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>抵达时间</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>通过时间</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>最小时间</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>最大时间</string>
-                </property>
-                <property name="textAlignment">
-                 <set>AlignJustify|AlignVCenter</set>
-                </property>
-               </column>
               </widget>
              </item>
             </layout>
@@ -286,7 +201,7 @@
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_4">
                <item>
-                <widget class="QTableWidget" name="tableWidget"/>
+                <widget class="QTableWidget" name="tableWidget_command"/>
                </item>
               </layout>
              </widget>
@@ -298,7 +213,7 @@
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
                <item>
-                <widget class="QTableWidget" name="tableWidget_2"/>
+                <widget class="QTableWidget" name="tableWidget_control"/>
                </item>
               </layout>
              </widget>

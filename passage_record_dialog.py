@@ -19,6 +19,17 @@ class PassageRecordDialog(QDialog):
         self.record_manager = record_manager
         self.current_date = QDate.currentDate()
 
+        # 设置窗口属性：关闭时不删除，只是隐藏
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+
+        # 设置窗口标志（可选，让窗口可以独立于主窗口）
+        self.setWindowFlags(
+            Qt.Window |
+            Qt.WindowCloseButtonHint |
+            Qt.WindowMinimizeButtonHint |
+            Qt.WindowMaximizeButtonHint
+        )
+
         self.setWindowTitle("船舶通行记录管理")
         self.resize(1200, 600)
 
@@ -101,6 +112,31 @@ class PassageRecordDialog(QDialog):
         btn_layout.addStretch()
         btn_layout.addWidget(close_btn)
         layout.addLayout(btn_layout)
+
+    def closeEvent(self, event):
+        """
+        重写关闭事件，关闭时隐藏窗口而不是销毁
+
+        Args:
+            event: 关闭事件
+        """
+        # 隐藏窗口
+        self.hide()
+        # 忽略关闭事件，不销毁窗口
+        event.ignore()
+        print("通行记录管理界面已隐藏，后台继续运行")
+
+    def showEvent(self, event):
+        """显示事件，窗口显示时刷新数据"""
+        self.load_records()
+        super().showEvent(event)
+
+    def show_and_refresh(self):
+        """显示并刷新数据"""
+        self.load_records()
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def load_records(self):
         """加载记录"""

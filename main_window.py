@@ -2,13 +2,16 @@ import base64
 import json
 import sys
 import time
+from datetime import datetime
 from typing import Tuple, List
 
 import folium
 import tempfile
 import os
 
+from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWebEngineWidgets import QWebEngineSettings
+from sqlalchemy import false
 
 from APIManager import APIManager,APIService
 from led_manager import LEDManager
@@ -18,6 +21,7 @@ from mileage_region_manager import MileageRegionManager
 from passage_record_edit_dialog import PassageRecordEditDialog
 from passage_record_manager import PassageRecordManager
 from queue_manager import QueueManager
+from queue_updater import QueueProcessor
 from ship_manager import ShipInfo
 from sqlite3Manager import SQLiteTableManager
 
@@ -27,7 +31,7 @@ os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLineEdit, QLabel, QMessageBox, QGridLayout)
+                             QLineEdit, QLabel, QMessageBox, QGridLayout, QTableWidgetItem, QHeaderView, QTableWidget)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, pyqtSignal, QObject, Qt, center, QTimer, QDateTime
 from PyQt5.QtWebChannel import QWebChannel
@@ -69,7 +73,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 记录程序启动时间
         self.startup_time = time.time()
-        self.is_open = False  # 是否开机超过2分钟
+        self.is_open = True  # 是否开机超过2分钟
         # 初始化时间显示
         self.init_time_display()
 
@@ -159,6 +163,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.passage_record_manager.record_created.connect(self.on_record_created)
         self.passage_record_manager.record_completed.connect(self.on_record_completed)
 
+        # 通行记录管理界面（单例）
+        self.passage_record_dialog = None
+
         # 设置定时器自动清理
         self.cleanup_timer_record = QTimer()
         self.cleanup_timer_record.timeout.connect(self.passage_record_manager.auto_cleanup)
@@ -169,10 +176,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from queue_manager import QueueManager
         self.queue_manager = QueueManager(self.passage_record_manager)
 
-        # 连接队列变化信号到表格更新
-        self.queue_manager.pending_queue_changed.connect(self.update_pending_table)
-        self.queue_manager.commanded_queue_changed.connect(self.update_commanded_table)
-        self.queue_manager.control_area_queue_changed.connect(self.update_control_area_table)
+        # 创建队列处理器
+        self.queue_processor = None
+        self.start_queue_processor()
+        self.current_signal='关闭'  #控制河段的信号
 
         #api接口
         self.api = api_service
@@ -213,6 +220,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.comboBox.setCurrentText("0")
         self.comboBox.setCurrentText(river[0].get("ReachName"))
 
+    def get_current_signal(self) -> str:
+        """
+        获取当前控制河段信号
+
+        Returns:
+            'up': 上水信号
+            'down': 下水信号
+            'off': 关闭
+        """
+        # 这里根据实际情况返回当前信号
+        # 可以从LED灯状态、信号控制界面等获取
+        return self.current_signal
+
+    def start_queue_processor(self):
+        """启动队列处理器"""
+        self.queue_processor = QueueProcessor(self.queue_manager, self.get_current_signal)
+
+        # 连接信号
+        self.queue_processor.pending_updated.connect(self.update_pending_table)
+        self.queue_processor.commanded_updated.connect(self.update_commanded_table)
+        self.queue_processor.control_area_updated.connect(self.update_control_area_table)
+
+        # 启动线程
+        self.queue_processor.start()
+        print("队列处理器已启动，每15秒处理一次")
     # 在主窗口初始化时设置
     def setup_web_channel(self):
         # 创建桥接对象
@@ -252,8 +284,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 创建水平布局
         self.led_layout = QHBoxLayout(self.led_container)
-        self.led_layout.setSpacing(15)
-        self.led_layout.setContentsMargins(10, 10, 10, 10)
+        self.led_layout.setSpacing(0)
+        self.led_layout.setContentsMargins(0, 0, 0, 0)
         self.led_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         # 默认隐藏容器
@@ -443,10 +475,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def show_passage_records(self):
         """显示通行记录管理界面"""
-        from passage_record_dialog import PassageRecordDialog
-        dialog = PassageRecordDialog(self.passage_record_manager, self)
-        dialog.record_saved.connect(self.on_record_saved)
-        dialog.exec_()
+        if self.passage_record_dialog is None:
+            from passage_record_dialog import PassageRecordDialog
+            self.passage_record_dialog = PassageRecordDialog(self.passage_record_manager, self)
+            self.passage_record_dialog.record_saved.connect(self.on_record_saved)
+
+            # 显示并刷新数据
+        self.passage_record_dialog.show_and_refresh()
 
     def on_record_created(self, mmsi):
         print(f"新通行记录创建: {mmsi}")
@@ -1107,23 +1142,265 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if removed > 0:
             print(f"清理了 {removed} 艘过期船舶")
 
-    def update_pending_table(self):
+
+    def update_pending_table(self,ships):
         """更新待指挥队列表格"""
-        ships = self.queue_manager.get_pending_list()
-        # 在这里更新你的表格显示
-        print(f"待指挥队列: {len(ships)} 艘")
-        for ship in ships:
-            print(f"  - {ship.get('name')} ({ship.get('mmsi')}) {ship.get('calc_range')}")
 
-    def update_commanded_table(self):
+        # 设置表格列数
+        columns = 6
+        self.tableWidget_pending.setColumnCount(columns)
+
+        # 设置表头
+        headers = [ "船名", "航向", "实时时间", "拟揭示信号", "是否到位", "抵达时间"]
+        self.tableWidget_pending.setHorizontalHeaderLabels(headers)
+
+        # 设置行数
+        self.tableWidget_pending.setRowCount(len(ships))
+
+        # 设置表格属性
+        self.tableWidget_pending.setAlternatingRowColors(True)
+        self.tableWidget_pending.setSortingEnabled(False)
+
+        # 关键：设置列拉伸模式，让列填满整个表格
+        header = self.tableWidget_pending.horizontalHeader()
+
+        # 设置所有列按比例拉伸
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        # 或者设置特定列拉伸，其他列固定宽度
+        # header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 排序序号自适应内容
+        # header.setSectionResizeMode(1, QHeaderView.Stretch)  # 船名拉伸
+        # header.setSectionResizeMode(2, QHeaderView.Stretch)  # 航向拉伸
+        # header.setSectionResizeMode(3, QHeaderView.Stretch)  # 实时时间拉伸
+        # header.setSectionResizeMode(4, QHeaderView.Stretch)  # 拟揭示信号拉伸
+        # header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 是否到位自适应
+        # header.setSectionResizeMode(6, QHeaderView.Stretch)  # 抵达时间拉伸
+
+        # 填充数据
+        for row, ship in enumerate(ships):
+            # 排序序号
+            seq_item = QTableWidgetItem(str(row + 1))
+            seq_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_pending.setItem(row, 0, seq_item)
+
+            # 船名
+            name_item = QTableWidgetItem(ship.get('name', '未知'))
+            name_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_pending.setItem(row, 0, name_item)
+
+            # 航向（上下水方向）
+            direction = ship.get('status', 'unknown')
+            direction_text = "上水" if direction == 'up' else "下水" if direction == 'down' else "未知"
+            dir_item = QTableWidgetItem(direction_text)
+            dir_item.setTextAlignment(Qt.AlignCenter)
+            # 根据方向设置颜色
+            if direction == 'up':
+                dir_item.setBackground(QBrush(QColor(200, 230, 255)))  # 浅蓝色
+            elif direction == 'down':
+                dir_item.setBackground(QBrush(QColor(255, 200, 200)))  # 浅红色
+            self.tableWidget_pending.setItem(row, 1, dir_item)
+
+            # 实时时间（到达上界限标所需时间）
+            time_minutes = ship.get('time_minutes', 0)
+            if time_minutes > 0:
+                time_text = f"{time_minutes:.1f}"
+            else:
+                time_text = "--"
+            time_item = QTableWidgetItem(time_text)
+            time_item.setTextAlignment(Qt.AlignCenter)
+            # 时间小于3分钟时高亮显示
+            if 0 < time_minutes < 3:
+                time_item.setBackground(QBrush(QColor(255, 200, 100)))  # 橙色高亮
+            self.tableWidget_pending.setItem(row, 2, time_item)
+
+            # 拟揭示信号
+            calc_range = ship.get('calc_range', '')
+            signal_text = "上水" if calc_range == 'up' else "下水" if calc_range == 'down' else "-"
+            signal_item = QTableWidgetItem(signal_text)
+            signal_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_pending.setItem(row, 3, signal_item)
+
+            # 是否到位（是否到达揭示区域内）
+            is_arrived = ship.get('is_arrived', False)
+            arrival_time=ship.get('arrival_time', 0)
+            diff_time=0
+            if is_arrived:
+                diff_time=(time.time()-arrival_time)/60
+            arrived_text =f"是（{diff_time:.1f}）" if is_arrived else "否"
+            arrived_item = QTableWidgetItem(arrived_text)
+            arrived_item.setTextAlignment(Qt.AlignCenter)
+            if is_arrived:
+                arrived_item.setBackground(QBrush(QColor(200, 255, 200)))  # 浅绿色
+            self.tableWidget_pending.setItem(row, 4, arrived_item)
+
+            # 抵达时间（到达上界限标所需时间，与实时时间相同或已到达的分钟数）
+
+            arrived_minutes = ship.get('arrived_minutes', 0)
+            arrive_text = f"{arrived_minutes:.1f}"
+
+            arrive_item = QTableWidgetItem(arrive_text)
+            arrive_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_pending.setItem(row, 5, arrive_item)
+
+        # 调整行高
+        for row in range(len(ships)):
+            self.tableWidget_pending.setRowHeight(row, 30)
+
+        print(f"待指挥队列表格已更新: {len(ships)} 艘")
+
+    def update_commanded_table(self, ships):
         """更新已指挥队列表格"""
-        ships = self.queue_manager.get_commanded_list()
-        print(f"已指挥队列: {len(ships)} 艘")
+        # 设置列数
+        columns = 5
+        self.tableWidget_command.setColumnCount(columns)
 
-    def update_control_area_table(self):
-        """更新控制河段区域队列表格"""
-        ships = self.queue_manager.get_control_area_list()
-        print(f"控制河段区域: {len(ships)} 艘")
+        # 设置表头
+        headers = ["船名", "航向", "时间(分)",'信号']
+        self.tableWidget_command.setHorizontalHeaderLabels(headers)
+
+        # 设置行数
+        self.tableWidget_command.setRowCount(len(ships))
+
+        # 关键：设置列拉伸模式，让列填满整个表格
+        header = self.tableWidget_command.horizontalHeader()
+
+        # 设置所有列按比例拉伸
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        # 设置表格属性
+        self.tableWidget_command.setAlternatingRowColors(True)
+        self.tableWidget_command.setSortingEnabled(False)
+        self.tableWidget_command.setSelectionBehavior(QTableWidget.SelectRows)
+
+
+        # 填充数据
+        for row, ship in enumerate(ships):
+            from PyQt5.QtGui import QBrush, QColor
+
+
+            # 1. 船名
+            name = ship.get('name', '未知')
+            name_item = QTableWidgetItem(name)
+            name_item.setTextAlignment(Qt.AlignCenter)
+            name_item.setToolTip(f"MMSI: {ship.get('mmsi', '')}")
+            self.tableWidget_command.setItem(row, 0, name_item)
+
+            # 2. 航向
+            direction = ship.get('status', 'unknown')
+            direction_text = "上水" if direction == 'up' else "下水" if direction == 'down' else "未知"
+            dir_item = QTableWidgetItem(direction_text)
+            dir_item.setTextAlignment(Qt.AlignCenter)
+            if direction == 'up':
+                dir_item.setBackground(QBrush(QColor(200, 230, 255)))
+            elif direction == 'down':
+                dir_item.setBackground(QBrush(QColor(255, 200, 200)))
+            self.tableWidget_command.setItem(row, 1, dir_item)
+
+
+
+            # 3. 揭示时间（已过去分钟数）
+            elapsed_minutes = ship.get('elapsed_minutes', 0)
+            elapsed_text = f"{elapsed_minutes:.1f}" if elapsed_minutes > 0 else "-"
+            elapsed_item = QTableWidgetItem(elapsed_text)
+            elapsed_item.setTextAlignment(Qt.AlignCenter)
+            # 超过20分钟警告
+            if elapsed_minutes > 20:
+                elapsed_item.setBackground(QBrush(QColor(255, 200, 200)))
+            self.tableWidget_command.setItem(row, 2, elapsed_item)
+
+            # 6. 揭示信号
+            calc_range = ship.get('calc_range', '')
+            signal_text = "上水" if calc_range == 'up' else "下水" if calc_range == 'down' else "-"
+            signal_item = QTableWidgetItem(signal_text)
+            signal_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_command.setItem(row, 3, signal_item)
+
+
+        # 调整行高
+        for row in range(len(ships)):
+            self.tableWidget_command.setRowHeight(row, 35)
+
+        print(f"已指挥队列表格已更新: {len(ships)} 艘")
+
+    def update_control_area_table(self, ships):
+        """更新控制河段队列表格"""
+        # 设置列数
+        columns = 5
+        self.tableWidget_control.setColumnCount(columns)
+
+        # 设置表头
+        headers = [ "船名", "航向", "进入时间", "已停留(分)"]
+        self.tableWidget_control.setHorizontalHeaderLabels(headers)
+
+        # 设置行数
+        self.tableWidget_control.setRowCount(len(ships))
+
+        # 设置表格属性
+        self.tableWidget_control.setAlternatingRowColors(True)
+        self.tableWidget_control.setSortingEnabled(False)
+        self.tableWidget_control.setSelectionBehavior(QTableWidget.SelectRows)
+
+        # 关键：设置列拉伸模式，让列填满整个表格
+        header = self.tableWidget_control.horizontalHeader()
+
+        # 设置所有列按比例拉伸
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        # 填充数据
+        current_time = time.time()
+        for row, ship in enumerate(ships):
+            from PyQt5.QtGui import QBrush, QColor
+
+
+
+            # 2. 船名
+            name = ship.get('name', '未知')
+            name_item = QTableWidgetItem(name)
+            name_item.setTextAlignment(Qt.AlignCenter)
+            name_item.setToolTip(f"MMSI: {ship.get('mmsi', '')}")
+            self.tableWidget_control.setItem(row, 0, name_item)
+
+            # 3. 航向
+            direction = ship.get('direction', 'unknown')
+            direction_text = "上水" if direction == 'up' else "下水" if direction == 'down' else "未知"
+            dir_item = QTableWidgetItem(direction_text)
+            dir_item.setTextAlignment(Qt.AlignCenter)
+            if direction == 'up':
+                dir_item.setBackground(QBrush(QColor(200, 230, 255)))
+            elif direction == 'down':
+                dir_item.setBackground(QBrush(QColor(255, 200, 200)))
+            self.tableWidget_control.setItem(row, 1, dir_item)
+
+            # 4. 进入时间
+            enter_time = ship.get('enter_control_time', 0)
+            if enter_time > 0:
+                time_str = datetime.fromtimestamp(enter_time).strftime('%H:%M:%S')
+                enter_time_item = QTableWidgetItem(time_str)
+            else:
+                enter_time_item = QTableWidgetItem("-")
+            enter_time_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_control.setItem(row, 2, enter_time_item)
+
+            # 5. 已停留时间（分钟）
+            if enter_time > 0:
+                elapsed_minutes = (current_time - enter_time) / 60
+                elapsed_text = f"{elapsed_minutes:.1f}"
+                elapsed_item = QTableWidgetItem(elapsed_text)
+                # 停留时间过长警告
+                if elapsed_minutes > 30:
+                    elapsed_item.setBackground(QBrush(QColor(255, 200, 200)))
+                elif elapsed_minutes > 15:
+                    elapsed_item.setBackground(QBrush(QColor(255, 235, 180)))
+            else:
+                elapsed_item = QTableWidgetItem("-")
+            elapsed_item.setTextAlignment(Qt.AlignCenter)
+            self.tableWidget_control.setItem(row, 3, elapsed_item)
+
+        # 调整行高
+        for row in range(len(ships)):
+            self.tableWidget_control.setRowHeight(row, 35)
+
+        print(f"控制河段队列表格已更新: {len(ships)} 艘")
 
     def on_ais_ships_updated(self, ships):
         """AIS船舶数据更新时的处理"""
@@ -1215,7 +1492,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             traceback.print_exc()
 
 
-    def update_queue_status(self,mmsi,ship_info: ShipInfo, channel_position: dict):
+    def update_queue_status(self,mmsi,ship_info: ShipInfo, channel_position: dict, crossing_result: dict):
         """更新船舶在队列中的状态"""
 
         #位置字典的关键字
@@ -1234,7 +1511,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
         #判断船舶是否在计算范围区域内
-        if ship_info.calc_range:
+        if ship_info.calc_range or channel_position.get('in_control_area',False) or channel_position.get('in_up_reveal_area',False) or channel_position.get('in_down_reveal_area',False):
             #如果船舶在上下水计算范围区域内，需要将船舶信息转化为队列信息
             # 构建队列用的船舶信息
             queue_ship_info = {
@@ -1250,7 +1527,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 'in_control_area': channel_position.get('in_control_area', False),
                 'in_park': channel_position.get('in_park', False),
                 'estimated_km': channel_position.get('estimated_km'),
-                'timestamp': time.time()
+                'time_minutes': channel_position.get('time_minutes'),#到达上界限标所需的时间
+                'is_arrived': ship_info.is_arrived,#是否到达揭示区域
+                'arrival_time': ship_info.arrival_time,#船舶到达揭示区域的时间
+                'timestamp': time.time(),
+                # 添加跨线检测结果
+                'cross_up_whistle': crossing_result.get('cross_up_whistle', False) if crossing_result else False,
+                'cross_down_whistle': crossing_result.get('cross_down_whistle', False) if crossing_result else False,
+                'cross_up_bound': crossing_result.get('cross_up_bound', False) if crossing_result else False,
+                'cross_down_bound': crossing_result.get('cross_down_bound', False) if crossing_result else False
             }
 
             # 调用队列管理器更新状态
@@ -1262,6 +1547,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 in_control_area=queue_ship_info['in_control_area'],
                 in_park=queue_ship_info['in_park']
             )
+
+
 
 
 

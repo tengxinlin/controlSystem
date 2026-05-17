@@ -470,24 +470,27 @@ class ControlReach:
                 up_line=self.up_bound_line,
                 down_line=self.down_bound_line
                 )
+            self.control_area.__post_init__()
 
-        # 如果有上鸣笛标和上界限标，创建上水揭示区域
+        # 如果有上鸣笛标和上界限标，创建下水揭示区域
         if self.up_whistle_line and self.up_bound_line:
-            self.up_reveal_area = RevealArea(
-                name='up_reveal',
-                whistle_line=self.up_whistle_line,
-                bound_line=self.up_bound_line,
-                description='上水揭示区'
-            )
-
-        # 如果有下鸣笛标和下界限标，创建下水揭示区域
-        if self.down_whistle_line and self.down_bound_line:
             self.down_reveal_area = RevealArea(
                 name='down_reveal',
-                whistle_line=self.down_whistle_line,
-                bound_line=self.down_bound_line,
+                whistle_line=self.up_whistle_line,
+                bound_line=self.up_bound_line,
                 description='下水揭示区'
             )
+            self.down_reveal_area.__post_init__()
+
+        # 如果有下鸣笛标和下界限标，创建上水揭示区域
+        if self.down_whistle_line and self.down_bound_line:
+            self.up_reveal_area = RevealArea(
+                name='up_reveal',
+                whistle_line=self.down_whistle_line,
+                bound_line=self.down_bound_line,
+                description='上水揭示区'
+            )
+            self.up_reveal_area.__post_init__()
 
     def to_dict(self) -> dict:
         """转换为字典，用于JavaScript"""

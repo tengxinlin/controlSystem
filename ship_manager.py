@@ -10,6 +10,7 @@ from sqlalchemy import false
 
 from mileage_region_manager import MileageRegionManager
 from queue_manager import QueueManager
+from reach_data import ControlReach
 from sqlite3Manager import SQLiteTableManager
 
 
@@ -39,6 +40,9 @@ class ShipInfo:
     status: str = None #船舶的状态，上水、下水、停靠、特殊
     shipType: str =None  #船舶的人工设定状态,None:未设定，'up','down','docked','special'
     staticInfo: dict = None #船舶静态信息
+    is_arrived: bool = False #是否抵达揭示区
+    arrival_time: float = 0 #到达揭示区域的时间，用来计算队列的等待时间
+
 
 
 
@@ -59,7 +63,7 @@ class ShipInfo:
         }
 
 
-
+from reach_data import ControlReach, ReachPoint, ReachLine, ReachPolygon, FenceArea, RevealArea
 class ShipManager(QObject):
     """船舶管理器 - 管理所有船舶状态"""
 
@@ -67,7 +71,7 @@ class ShipManager(QObject):
     ship_added = pyqtSignal(object)  # 新船舶添加
     ship_updated = pyqtSignal(object)  # 船舶信息更新
     ship_removed = pyqtSignal(str)  # 船舶移除 (MMSI)
-    update_queue_status = pyqtSignal(str, object,object)  # 更新船舶队列状态信息 (MMSI, 新方向)
+    update_queue_status = pyqtSignal(str, object,object,object)  # 更新船舶队列状态信息 (MMSI, 新方向)
 
     def __init__(self,api_service,mileage_manager=None,reach=None,queue_manager=None):
         super().__init__()
@@ -96,6 +100,9 @@ class ShipManager(QObject):
         # 历史轨迹存储（可选）
         self.track_history: Dict[str, List[Tuple[float, float, float]]] = {}
         self.max_track_points = 100  # 每艘船最多保存的轨迹点数
+
+        # 存储船舶的上一个位置（用于跨线检测）
+        self.ship_prev_position = {}  # mmsi -> (lat, lon)
 
     def set_mileage_manager(self, mileage_manager,reach,queue_manager):
         """设置航道里程管理器"""
@@ -213,7 +220,8 @@ class ShipManager(QObject):
                 ship.up_or_down=old_ship.up_or_down
                 ship.position_and_direction=position_and_direction
 
-
+                # 使用跨线检测更新
+                crossing_result=self.update_ship_with_crossing_detection(ship, position_and_direction)
 
                 # 判断是否在计算范围内
                 in_up_calc = position_and_direction.get('in_up_calc_range', False)
@@ -226,6 +234,22 @@ class ShipManager(QObject):
 
                 elif in_down_calc and ship.status=='down':
                     calc_range = 'down'
+
+                #判断是否在揭示区
+                if ship.status=='up' and position_and_direction.get('in_up_reveal_area', False):
+                    ship.is_arrived=True
+                    if old_ship.arrival_time==0 and not old_ship.is_arrived:
+                        ship.arrival_time=time.time()#记录下到达揭示去的时间
+                    else:
+                        ship.arrival_time=old_ship.arrival_time
+
+                elif ship.status == 'down' and position_and_direction.get('in_down_reveal_area', False):
+                    ship.is_arrived = True
+                    if old_ship.arrival_time == 0 and not old_ship.is_arrived:
+                        ship.arrival_time = time.time()  # 记录下到达揭示去的时间
+                    else:
+                        ship.arrival_time = old_ship.arrival_time
+
 
                 # 速度转换：节 -> 公里/分钟
                 # 1节 = 1.852公里/小时 = 1.852/60 ≈ 0.0308667公里/分钟
@@ -248,11 +272,13 @@ class ShipManager(QObject):
                 local_time = time.localtime(current_time)
                 ship.last_update_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
 
+
+
                 # 更新信息
                 self.ships[mmsi] = ship
 
                 # 更新队列状态
-                self.update_queue_status.emit(mmsi, ship, position_and_direction)
+                self.update_queue_status.emit(mmsi, ship, position_and_direction,crossing_result)
 
                 # 添加到轨迹历史
                 self._add_to_track_history(mmsi, ship.longitude,
@@ -472,12 +498,14 @@ class ShipManager(QObject):
         pos_info['in_up_reveal_area'] = self.current_reach.is_point_in_up_reveal_area(ship_lat, ship_lon)
         pos_info['in_down_reveal_area'] = self.current_reach.is_point_in_down_reveal_area(ship_lat, ship_lon)
 
+        test=self.current_reach.is_point_in_up_reveal_area(29.585037,106.659427)
+        test1=self.current_reach.is_point_in_control_area(29.589317,106.657720)
 
         return pos_info
 
     def update_ship(self, ship_info: ShipInfo, min_update_interval: float = 5.0):
         """
-        更新船舶信息
+        更新船舶信息给map用
 
         Args:
             ship_info: 新的船舶信息
@@ -536,6 +564,190 @@ class ShipManager(QObject):
             # 发射添加信号
             self.ship_updated.emit(ship_info.to_dict())
             return True
+
+    def update_ship_with_crossing_detection(self, ship_info: ShipInfo, channel_position: dict):
+        """
+        更新船舶信息，并检测是否跨越关键线
+        """
+        mmsi = ship_info.MMSI
+        current_point = (ship_info.latitude, ship_info.longitude)
+        current_heading = ship_info.heading
+
+        # 获取上一个点
+        prev_point = self.ship_prev_position.get(mmsi)
+
+        # 更新上一个点
+        self.ship_prev_position[mmsi] = current_point
+
+        result = {
+            'cross_up_whistle': False,
+            'cross_down_whistle': False,
+            'cross_up_bound': False,
+            'cross_down_bound': False
+        }
+        # 获取当前河段的界限标和鸣笛标
+        reach = self.current_reach
+        if not reach:
+            return result
+
+        # 判断船舶方向
+        is_up = channel_position.get('direction') == 'up'
+        is_down = channel_position.get('direction') == 'down'
+
+        # 如果有点的轨迹，进行跨线检测
+        if prev_point:
+            result= self._check_crossing_lines(prev_point, current_point, ship_info, reach, is_up, is_down)
+
+        return result
+
+
+
+    def _check_crossing_lines(self, prev_point: Tuple[float, float],
+                              curr_point: Tuple[float, float],
+                              ship_info: ShipInfo,
+                              reach: ControlReach,
+                              is_up: bool,
+                              is_down: bool) -> dict:
+        """
+        检测是否跨越关键线，返回跨越结果
+
+        Returns:
+            dict: 包含跨越信息的字典
+            {
+                'cross_up_whistle': bool,  # 跨过上鸣笛标
+                'cross_down_whistle': bool,  # 跨过下鸣笛标
+                'cross_up_bound': bool,  # 跨过上界限标
+                'cross_down_bound': bool,  # 跨过下界限标
+            }
+        """
+        result = {
+            'cross_up_whistle': False,
+            'cross_down_whistle': False,
+            'cross_up_bound': False,
+            'cross_down_bound': False
+        }
+
+        # 获取各关键线的端点
+        up_whistle_line = reach.up_whistle_line  # 上鸣笛标
+        down_whistle_line = reach.down_whistle_line  # 下鸣笛标
+        up_bound_line = reach.up_bound_line  # 上界限标
+        down_bound_line = reach.down_bound_line  # 下界限标
+
+        # 检测是否跨过上鸣笛标
+        if up_whistle_line and self._check_crossing_line(prev_point, curr_point,
+                                                         up_whistle_line.start,
+                                                         up_whistle_line.end):
+            result['cross_up_whistle'] = True
+            print(f"🚨 船舶 {ship_info.name} ({ship_info.MMSI}) 跨过上鸣笛标")
+
+        # 检测是否跨过下鸣笛标
+        if down_whistle_line and self._check_crossing_line(prev_point, curr_point,
+                                                           down_whistle_line.start,
+                                                           down_whistle_line.end):
+            result['cross_down_whistle'] = True
+            print(f"🚨 船舶 {ship_info.name} ({ship_info.MMSI}) 跨过下鸣笛标")
+
+        # 检测是否跨过上界限标
+        if up_bound_line and self._check_crossing_line(prev_point, curr_point,
+                                                       up_bound_line.start,
+                                                       up_bound_line.end):
+            result['cross_up_bound'] = True
+            print(f"🚪 船舶 {ship_info.name} ({ship_info.MMSI}) 跨过上界限标")
+
+        # 检测是否跨过下界限标
+        if down_bound_line and self._check_crossing_line(prev_point, curr_point,
+                                                         down_bound_line.start,
+                                                         down_bound_line.end):
+            result['cross_down_bound'] = True
+            print(f"🚪 船舶 {ship_info.name} ({ship_info.MMSI}) 跨过下界限标")
+
+        return result
+
+
+    def _check_crossing_line(self, prev_point: Tuple[float, float],
+                             curr_point: Tuple[float, float],
+                             line_start: ReachPoint,
+                             line_end: ReachPoint) -> bool:
+        """
+        检查船舶是否从线段的一侧跨越到另一侧
+
+        Args:
+            prev_point: 上一个点 (lat, lon)
+            curr_point: 当前点 (lat, lon)
+            line_start: 线段起点 (ReachPoint对象)
+            line_end: 线段终点 (ReachPoint对象)
+
+        Returns:
+            True 如果跨越了线段
+        """
+
+        def cross(o, a, b):
+            # o, a, b 都是 (lat, lon) 元组
+            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+        # 将 ReachPoint 对象转换为元组
+        start_point = (line_start.lat, line_start.lon)
+        end_point = (line_end.lat, line_end.lon)
+
+        # 计算两个点相对于线段的位置
+        prev_side = cross(start_point, end_point, prev_point)
+        curr_side = cross(start_point, end_point, curr_point)
+
+        # 如果两侧符号不同，说明跨越了线段
+        if prev_side * curr_side < 0:
+            return True
+
+        # 处理边界情况（点在线段上）
+        if abs(prev_side) < 1e-10 or abs(curr_side) < 1e-10:
+            return True
+
+        return False
+
+    def _calculate_distance_to_line(self, point: Tuple[float, float],
+                                    line_start: Tuple[float, float],
+                                    line_end: Tuple[float, float]) -> float:
+        """计算点到线段的距离"""
+        import math
+
+        lat, lon = point
+        lat1, lon1 = line_start
+        lat2, lon2 = line_end
+
+        # 将经纬度转换为近似平面坐标（米）
+        avg_lat = (lat + lat1 + lat2) / 3
+        meter_per_deg_lat = 111320
+        meter_per_deg_lon = 111320 * math.cos(math.radians(avg_lat))
+
+        x = lon * meter_per_deg_lon
+        y = lat * meter_per_deg_lat
+        x1 = lon1 * meter_per_deg_lon
+        y1 = lat1 * meter_per_deg_lat
+        x2 = lon2 * meter_per_deg_lon
+        y2 = lat2 * meter_per_deg_lat
+
+        # 计算点到线段的距离
+        A = x - x1
+        B = y - y1
+        C = x2 - x1
+        D = y2 - y1
+
+        dot = A * C + B * D
+        len_sq = C * C + D * D
+
+        if len_sq == 0:
+            return math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
+
+        param = dot / len_sq
+
+        if param < 0:
+            xx, yy = x1, y1
+        elif param > 1:
+            xx, yy = x2, y2
+        else:
+            xx = x1 + param * C
+            yy = y1 + param * D
+
+        return math.sqrt((x - xx) ** 2 + (y - yy) ** 2)
 
     def _significant_position_change(self, old_ship: ShipInfo, new_ship: ShipInfo,
                                      threshold_meters: float = 10) -> bool:

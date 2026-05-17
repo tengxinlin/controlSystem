@@ -44,11 +44,159 @@ class QueueManager(QObject):
         """
         in_calc_range = (in_up_calc or in_down_calc) and not in_park
         calc_range_type = 'up' if in_up_calc else ('down' if in_down_calc else None)
+        direction = ship_info.get('status', 'unknown')
 
         # 更新时间戳
         ship_info['last_update'] = time.time()
         ship_info['calc_range'] = calc_range_type
         ship_info['in_control_area'] = in_control_area
+
+        # 获取跨线检测结果
+        cross_up_whistle = ship_info.get('cross_up_whistle', False)
+        cross_down_whistle = ship_info.get('cross_down_whistle', False)
+        cross_up_bound = ship_info.get('cross_up_bound', False)
+        cross_down_bound = ship_info.get('cross_down_bound', False)
+
+        # ========== 如果船舶在停泊区内，从所有队列中移除 ==========
+        if in_park:
+            # 从待指挥队列移除
+            if mmsi in self.pending_queue:
+                del self.pending_queue[mmsi]
+                print(f"🚢 船舶 {ship_info.get('name', mmsi)} 进入停泊区，从待指挥队列移除")
+
+
+            # 从已指挥队列移除
+            if mmsi in self.commanded_queue:
+                del self.commanded_queue[mmsi]
+                print(f"🚢 船舶 {ship_info.get('name', mmsi)} 进入停泊区，从已指挥队列移除")
+
+
+            # 从控制河段队列移除
+            if mmsi in self.control_area_queue:
+                del self.control_area_queue[mmsi]
+                print(f"🚢 船舶 {ship_info.get('name', mmsi)} 进入停泊区，从控制河段队列移除")
+
+
+            # 不再继续处理其他队列逻辑
+            return
+
+        # ========== 2. 检查方向是否与计算范围匹配 ==========
+        # 如果上水船舶不在上游计算范围，或下水船舶不在下游计算范围，说明方向误判
+        is_direction_mismatch = (in_up_calc and  direction != 'up') or \
+                                (direction != 'down' and  in_down_calc)
+
+        if is_direction_mismatch and mmsi in self.pending_queue:
+            # 方向误判，从待指挥队列移除
+            del self.pending_queue[mmsi]
+            print(f"⚠️ 船舶 ({mmsi}) 方向误判（{direction}），从待指挥队列移除")
+            return
+
+        # 检查是否刚到达揭示区（is_arrived 变为 True）
+        previous_is_arrived = False
+        if mmsi in self.pending_queue:
+            previous_is_arrived = self.pending_queue[mmsi].get('is_arrived', False)
+
+        current_is_arrived = ship_info.get('is_arrived', False)
+
+        # 记录到达揭示区的时间戳
+        if current_is_arrived and not previous_is_arrived:
+            ship_info['arrival_time'] = time.time()
+            print(f"⏰ 船舶 {ship_info.get('name', mmsi)} 到达揭示区")
+            self._create_passage_record_if_not_exists(mmsi, ship_info)
+
+        # ========== 处理鸣笛标跨越（揭示区） ==========
+        # 上水船舶：跨过下鸣笛标进入上水揭示区
+        # 下水船舶：跨过上鸣笛标进入下水揭示区
+        # ========== 3. 处理揭示区（鸣笛标跨越） ==========
+        # 判断是否进入揭示区
+        is_entering_reveal = False
+        reveal_type = None
+
+        if direction == 'up' and cross_down_whistle:
+            is_entering_reveal = True
+            reveal_type = 'up'
+            print(f"⏰ 船舶  ({mmsi}) 进入上水揭示区（跨过下鸣笛标）")
+        elif direction == 'down' and cross_up_whistle:
+            is_entering_reveal = True
+            reveal_type = 'down'
+            print(f"⏰ 船舶 {mmsi} 进入下水揭示区（跨过上鸣笛标）")
+
+        # 检查是否刚到达揭示区
+        previous_is_arrived = False
+        if mmsi in self.pending_queue:
+            previous_is_arrived = self.pending_queue[mmsi].get('is_arrived', False)
+
+        current_is_arrived = ship_info.get('is_arrived', False) or is_entering_reveal
+
+        # 记录到达揭示区的时间戳
+        if current_is_arrived and not previous_is_arrived:
+            ship_info['arrival_time'] = time.time()
+            print(
+                f"⏰ 船舶 {ship_info.get('name', mmsi)} 到达揭示区，时间: {datetime.fromtimestamp(ship_info['arrival_time']).strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # 创建通行记录（如果没有）
+            self._create_passage_record_if_not_exists(mmsi, ship_info)
+
+            #如果是下水船舶
+            if reveal_type == 'down':
+                #记录预告时间
+                self._update_passage_record_notice_time(mmsi, time.time())
+
+
+
+        # ========== 处理界限标跨越（控制河段） ==========
+        # 记录进漕时间（进入控制河段）
+        previous_in_control = False
+        if mmsi in self.commanded_queue:
+            previous_in_control = self.pending_queue[mmsi].get('in_control_area', False)
+
+        # 判断是否进入控制河段（跨过相应的界限标）
+        entering_control = False
+        if direction == 'up' and cross_down_bound:
+            entering_control = True
+            print(f"🚪 船舶 {ship_info.get('name', mmsi)} 进入控制河段（跨过下界限标）")
+        elif direction == 'down' and cross_up_bound:
+            entering_control = True
+            print(f"🚪 船舶 {ship_info.get('name', mmsi)} 进入控制河段（跨过上界限标）")
+
+        # 刚进入控制河段
+        if (in_control_area or entering_control) and not previous_in_control and not in_park:
+            enter_time = time.time()
+            ship_info['enter_channel_time'] = enter_time
+            print(
+                f"🚪 船舶 {ship_info.get('name', mmsi)} 进漕时间: {datetime.fromtimestamp(enter_time).strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # 更新通行记录的进漕时间
+            self._update_passage_record_enter_time(mmsi, enter_time)
+
+        # 判断是否离开控制河段（跨过相应的界限标）
+        leaving_control = False
+        if direction == 'up' and cross_up_bound:
+            leaving_control = True
+            print(f"🚪 船舶 {ship_info.get('name', mmsi)} 离开控制河段（跨过上界限标）")
+        elif direction == 'down' and cross_down_bound:
+            leaving_control = True
+            print(f"🚪 船舶 {ship_info.get('name', mmsi)} 离开控制河段（跨过下界限标）")
+
+        # 刚离开控制河段
+        if (not in_control_area or leaving_control) and previous_in_control and not in_park:
+            exit_time = time.time()
+            ship_info['exit_channel_time'] = exit_time
+
+            # 计算通过时间
+            enter_time = ship_info.get('enter_channel_time', 0)
+            if enter_time > 0:
+                passage_minutes = (exit_time - enter_time) / 60
+                print(
+                    f"🚪 船舶 {ship_info.get('name', mmsi)} 出漕时间: {datetime.fromtimestamp(exit_time).strftime('%Y-%m-%d %H:%M:%S')}, 通过时间: {passage_minutes:.1f}分钟")
+
+            # 更新通行记录的出漕时间
+            self._update_passage_record_exit_time(mmsi, exit_time)
+
+        # 添加用于表格显示的信息
+        ship_info['time_minutes'] = ship_info.get('time_minutes', 0)  # 到达上界限标的时间（分钟）
+        ship_info['is_arrived'] = ship_info.get('is_arrived', False)  # 是否到达揭示区
+        ship_info['arrival_time'] = ship_info.get('arrival_time', 0)  # 到达揭示区的时间戳
 
         # 1. 首先处理控制河段区域队列
         if in_control_area and not in_park:
@@ -79,27 +227,152 @@ class QueueManager(QObject):
             if mmsi in self.commanded_queue:
                 # 已经在已指挥队列，更新信息
                 self.commanded_queue[mmsi].update(ship_info)
-                self.commanded_queue_changed.emit()
+
             elif mmsi not in self.pending_queue:
                 # 不在待指挥队列，加入待指挥队列
                 ship_info['enter_pending_time'] = time.time()
                 self.pending_queue[mmsi] = ship_info.copy()
                 print(f"➕ 船舶 {ship_info.get('name', mmsi)} 加入待指挥队列 ({calc_range_type})")
-                self.pending_queue_changed.emit()
+
             else:
                 # 已在待指挥队列，更新信息
                 self.pending_queue[mmsi].update(ship_info)
-                self.pending_queue_changed.emit()
+
 
         else:
             # 不在计算范围内，从待指挥队列和已指挥队列移除
             if mmsi in self.pending_queue:
                 del self.pending_queue[mmsi]
                 print(f"❌ 船舶 {ship_info.get('name', mmsi)} 从待指挥队列移除")
-                self.pending_queue_changed.emit()
 
-            # 注意：已指挥队列的船舶如果离开计算范围，仍然保留在已指挥队列中
-            # 除非超过过期时间
+
+
+    def _update_passage_record_enter_time(self, mmsi: str, enter_time: float):
+        """
+        更新通行记录的进漕时间
+
+        Args:
+            mmsi: 船舶MMSI
+            enter_time: 进漕时间戳
+        """
+        try:
+            if not hasattr(self, 'passage_record_manager') or not self.passage_record_manager:
+                return
+
+            # 获取船舶的活跃通行记录
+            active_records = self.passage_record_manager.get_active_records()
+            for record in active_records:
+                if record.get('mmsi') == mmsi:
+                    # 更新进漕时间
+                    self.passage_record_manager.update_record(
+                        mmsi,
+                        enter_channel_time=int(enter_time)
+                    )
+                    print(f"📝 更新通行记录进漕时间: {record.get('name', mmsi)}")
+                    break
+
+        except Exception as e:
+            print(f"更新通行记录进漕时间失败: {e}")
+
+    def _update_passage_record_notice_time(self, mmsi: str, notice_time: float):
+        """
+        更新通行记录的预告时间
+
+        Args:
+            mmsi: 船舶MMSI
+            notice_time: 预告时间戳
+        """
+        try:
+            if not hasattr(self, 'passage_record_manager') or not self.passage_record_manager:
+                return
+
+            # 获取船舶的活跃通行记录
+            active_records = self.passage_record_manager.get_active_records()
+            for record in active_records:
+                if record.get('mmsi') == mmsi:
+                    # 更新进漕时间
+                    self.passage_record_manager.update_record(
+                        mmsi,
+                        forecast_time=int(notice_time)
+                    )
+                    print(f"📝 更新通行记录预告时间: {record.get('name', mmsi)}")
+                    break
+
+        except Exception as e:
+            print(f"更新通行记录进漕时间失败: {e}")
+    def _update_passage_record_exit_time(self, mmsi: str, exit_time: float):
+        """
+        更新通行记录的出漕时间，并完成记录
+
+        Args:
+            mmsi: 船舶MMSI
+            exit_time: 出漕时间戳
+        """
+        try:
+            if not hasattr(self, 'passage_record_manager') or not self.passage_record_manager:
+                return
+
+            # 获取船舶的活跃通行记录
+            active_records = self.passage_record_manager.get_active_records()
+            for record in active_records:
+                if record.get('mmsi') == mmsi:
+                    # 更新出漕时间并完成记录
+                    self.passage_record_manager.record_exit_channel(mmsi, int(exit_time))
+                    print(f"📝 更新通行记录出漕时间: {record.get('name', mmsi)}")
+                    break
+
+        except Exception as e:
+            print(f"更新通行记录出漕时间失败: {e}")
+
+    def _create_passage_record_if_not_exists(self, mmsi: str, ship_info: dict):
+        """
+        如果船舶没有通行记录，则创建新的通行记录
+
+        Args:
+            mmsi: 船舶MMSI
+            ship_info: 船舶信息
+        """
+        try:
+            # 检查是否已有活跃的通行记录
+            existing_record = None
+            if hasattr(self, 'passage_record_manager') and self.passage_record_manager:
+                # 获取活跃记录
+                active_records = self.passage_record_manager.get_active_records()
+                for record in active_records:
+                    if record.get('mmsi') == mmsi:
+                        existing_record = record
+                        break
+
+            # 如果没有通行记录，创建新的
+            if existing_record is None:
+                # 获取必要的船舶信息
+                name = ship_info.get('name', '')
+                direction = ship_info.get('status', 'unknown')
+
+                # 确定方向
+                if direction == 'up' or ship_info.get('calc_range') == 'up':
+                    direction = 'up'
+                elif direction == 'down' or ship_info.get('calc_range') == 'down':
+                    direction = 'down'
+                else:
+                    # 如果无法确定方向，不创建记录
+                    print(f"⚠️ 无法确定船舶 {name} ({mmsi}) 的方向，跳过创建通行记录")
+                    return
+
+                # 创建通行记录
+                if hasattr(self, 'passage_record_manager') and self.passage_record_manager:
+                    record = self.passage_record_manager.create_record(
+                        mmsi=mmsi,
+                        name=name,
+                        direction=direction
+                    )
+                    if record:
+                        print(f"📝 创建通行记录: {name} ({mmsi}) - {direction}")
+                    else:
+                        print(f"⚠️ 创建通行记录失败: {name} ({mmsi})")
+
+        except Exception as e:
+            print(f"创建通行记录时出错: {e}")
 
     def command_ship(self, mmsi: str, command_data: dict = None):
         """

@@ -98,7 +98,7 @@ class LEDManager(QObject):
         try:
             # 解析状态消息
             data = json.loads(payload) if payload.startswith('{') else {'status': int(payload)}
-            status = data.get('status', data.get('state', 4))
+            status = data.get('status', data.get('state', 1))
 
             # 找到对应的LED
             for led in self.leds.values():

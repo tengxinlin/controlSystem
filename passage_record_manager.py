@@ -20,6 +20,7 @@ class PassageRecordManager(QObject):
         super().__init__()
         # 数据库操作对象
         self.db = CommandRecordDB(db_manager)
+        self.get_today_records()
 
         # 配置
         self.auto_cleanup_days =  1 # 自动清理超过7天的记录
@@ -69,7 +70,6 @@ class PassageRecordManager(QObject):
             'mmsi': mmsi,
             'name': name,
             'direction': direction,
-            'forecast_time': current_time,
             'create_time': current_time,
             'last_update': current_time,
             'is_active': 1
@@ -224,6 +224,7 @@ class PassageRecordManager(QObject):
             print(f"自动清理了 {total_cleaned} 条过期记录")
 
         return total_cleaned
+
 
     def update_from_ship_manager(self, ship_info: dict,
                                  in_reveal_area: bool,

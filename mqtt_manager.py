@@ -114,9 +114,16 @@ class MQTTManager(QObject):
             self.signals.log_message.emit("✅ MQTT连接成功")
 
             # 连接成功后，订阅所有待订阅的主题
-            for topic, qos in self.pending_subscriptions:
-                self.client.subscribe(topic, qos)
-                self.signals.log_message.emit(f"订阅主题: {topic} (QoS: {qos})")
+            if self.pending_subscriptions:
+                self.signals.log_message.emit(f"正在重新订阅 {len(self.pending_subscriptions)} 个主题...")
+                for topic, qos in self.pending_subscriptions:
+                    result = self.client.subscribe(topic, qos)
+                    if result[0] == mqtt.MQTT_ERR_SUCCESS:
+                        self.subscribed_topics[topic] = qos
+                        self.signals.subscribed.emit(topic, qos)
+                        self.signals.log_message.emit(f"✅ 重新订阅主题: {topic} (QoS: {qos})")
+                    else:
+                        self.signals.log_message.emit(f"❌ 重新订阅失败: {topic}")
 
             # 清空待订阅列表
             self.pending_subscriptions.clear()
@@ -125,6 +132,7 @@ class MQTTManager(QObject):
             error_msg = f"连接失败，返回码: {rc}"
             self.signals.connection_failed.emit(error_msg)
             self.signals.log_message.emit(f"❌ {error_msg}")
+
 
             # 自动重连
             if self.auto_reconnect and self.reconnect_attempts < self.max_reconnect_attempts:
@@ -137,10 +145,13 @@ class MQTTManager(QObject):
         """断开连接回调"""
         self.is_connected = False
         self.signals.disconnected.emit()
+        # 保存当前已订阅的主题到待订阅列表（用于重连后重新订阅）
+        if self.subscribed_topics:
+            self.pending_subscriptions = [(topic, qos) for topic, qos in self.subscribed_topics.items()]
+            self.signals.log_message.emit(f"已保存 {len(self.pending_subscriptions)} 个主题待重新订阅")
 
         if rc != 0:
             self.signals.log_message.emit(f"意外断开连接，返回码: {rc}")
-
             # 自动重连
             if self.auto_reconnect and self.reconnect_attempts < self.max_reconnect_attempts:
                 self.reconnect_attempts += 1
@@ -232,9 +243,16 @@ class MQTTManager(QObject):
             self.signals.disconnected.emit()
             self.signals.log_message.emit("已断开MQTT连接")
 
+
     def reconnect(self):
         """重新连接"""
         self.signals.log_message.emit("尝试重新连接...")
+
+        # 保存当前已订阅的主题
+        if self.subscribed_topics:
+            self.pending_subscriptions = [(topic, qos) for topic, qos in self.subscribed_topics.items()]
+            self.signals.log_message.emit(f"已保存 {len(self.pending_subscriptions)} 个主题待重新订阅")
+
         self.disconnect()
         time.sleep(1)
         self.connect()
@@ -284,58 +302,65 @@ class MQTTManager(QObject):
             callback: 收到消息时的回调函数
         """
 
-        if not self.is_connected:
-            # 存储待订阅主题
-            self.pending_subscriptions.append((topic, qos))
-            self.signals.log_message.emit("❌ 未连接，无法订阅，暂存到待订阅主题")
-            return False
+        # 保存回调函数
+        if callback:
+            self.message_handlers[topic] = callback
 
-        try:
-            result = self.client.subscribe(topic, qos)
+        # 如果已连接，立即订阅
+        if self.is_connected:
+            try:
+                result = self.client.subscribe(topic, qos)
 
-            if result[0] == mqtt.MQTT_ERR_SUCCESS:
-                self.subscribed_topics[topic] = qos
+                if result[0] == mqtt.MQTT_ERR_SUCCESS:
+                    self.subscribed_topics[topic] = qos
+                    self.signals.subscribed.emit(topic, qos)
+                    self.signals.log_message.emit(f"✅ 已订阅主题: {topic} (QoS: {qos})")
+                    return True
+                else:
+                    self.signals.log_message.emit(f"❌ 订阅失败: {result[0]}")
+                    return False
 
-                if callback:
-                    self.message_handlers[topic] = callback
-
-                self.signals.subscribed.emit(topic, qos)
-                self.signals.log_message.emit(f"✅ 已订阅主题: {topic} (QoS: {qos})")
-                return True
-            else:
-                self.signals.log_message.emit(f"❌ 订阅失败: {result[0]}")
+            except Exception as e:
+                self.signals.log_message.emit(f"❌ 订阅时出错: {e}")
                 return False
-
-        except Exception as e:
-            self.signals.log_message.emit(f"❌ 订阅时出错: {e}")
-            return False
+        else:
+            # 未连接，暂存到待订阅列表
+            self.pending_subscriptions.append((topic, qos))
+            self.signals.log_message.emit(f"⏳ 未连接，暂存订阅: {topic}")
+            return True
 
     def unsubscribe(self, topic: str):
         """取消订阅"""
-        if not self.is_connected:
-            self.signals.log_message.emit("❌ 未连接，无法取消订阅")
-            return False
 
-        try:
-            result = self.client.unsubscribe(topic)
+        # 从已订阅列表中移除
+        if topic in self.subscribed_topics:
+            del self.subscribed_topics[topic]
 
-            if result[0] == mqtt.MQTT_ERR_SUCCESS:
-                if topic in self.subscribed_topics:
-                    del self.subscribed_topics[topic]
+        # 从待订阅列表中移除
+        self.pending_subscriptions = [(t, q) for t, q in self.pending_subscriptions if t != topic]
 
-                if topic in self.message_handlers:
-                    del self.message_handlers[topic]
+        # 如果已连接，取消订阅
+        if self.is_connected:
+            try:
+                result = self.client.unsubscribe(topic)
 
-                self.signals.unsubscribed.emit(topic)
-                self.signals.log_message.emit(f"✅ 已取消订阅: {topic}")
-                return True
-            else:
-                self.signals.log_message.emit(f"❌ 取消订阅失败: {result[0]}")
+                if result[0] == mqtt.MQTT_ERR_SUCCESS:
+                    if topic in self.message_handlers:
+                        del self.message_handlers[topic]
+                    self.signals.unsubscribed.emit(topic)
+                    self.signals.log_message.emit(f"✅ 已取消订阅: {topic}")
+                    return True
+                else:
+                    self.signals.log_message.emit(f"❌ 取消订阅失败: {result[0]}")
+                    return False
+
+            except Exception as e:
+                self.signals.log_message.emit(f"❌ 取消订阅时出错: {e}")
                 return False
+        else:
+            self.signals.log_message.emit(f"✅ 已从待订阅列表移除: {topic}")
+            return True
 
-        except Exception as e:
-            self.signals.log_message.emit(f"❌ 取消订阅时出错: {e}")
-            return False
 
     def get_subscribed_topics(self) -> List[str]:
         """获取已订阅的主题列表"""
