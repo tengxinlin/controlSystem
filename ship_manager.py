@@ -264,7 +264,8 @@ class ShipManager(QObject):
                 if speed_km_per_min and km_diff:
                     time_minutes = km_diff / speed_km_per_min
                     position_and_direction['time_minutes']=round(time_minutes, 1) #保留一位小数
-
+                else :
+                    position_and_direction['time_minutes'] =999
                 #船舶在哪个计算范围区域
                 ship.calc_range = calc_range
 
@@ -469,7 +470,7 @@ class ShipManager(QObject):
                     break
 
             # 在停靠区且速度小于1节的
-            if isInPark and speed < 1:
+            if isInPark and speed < 1.5:
                 pos_info['in_park'] = True
                 pos_info['direction'] = 'docked'  # 停泊状态
                 return pos_info
@@ -663,45 +664,83 @@ class ShipManager(QObject):
 
         return result
 
-
     def _check_crossing_line(self, prev_point: Tuple[float, float],
                              curr_point: Tuple[float, float],
                              line_start: ReachPoint,
-                             line_end: ReachPoint) -> bool:
+                             line_end: ReachPoint,
+                             tolerance: float = 1e-9) -> bool:
         """
-        检查船舶是否从线段的一侧跨越到另一侧
+        检查船舶轨迹（两点连线）是否与线段相交
 
         Args:
             prev_point: 上一个点 (lat, lon)
             curr_point: 当前点 (lat, lon)
             line_start: 线段起点 (ReachPoint对象)
             line_end: 线段终点 (ReachPoint对象)
+            tolerance: 容差，用于判断点是否在线段上
 
         Returns:
-            True 如果跨越了线段
+            True 如果相交
         """
+        # 转换坐标
+        p1 = prev_point
+        p2 = curr_point
+        p3 = (line_start.lat, line_start.lon)
+        p4 = (line_end.lat, line_end.lon)
 
+        # 快速排斥实验：检查包围盒是否相交
+        if max(p1[0], p2[0]) < min(p3[0], p4[0]) or max(p3[0], p4[0]) < min(p1[0], p2[0]) or \
+                max(p1[1], p2[1]) < min(p3[1], p4[1]) or max(p3[1], p4[1]) < min(p1[1], p2[1]):
+            return False
+
+        # 计算叉积
         def cross(o, a, b):
-            # o, a, b 都是 (lat, lon) 元组
             return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
-        # 将 ReachPoint 对象转换为元组
-        start_point = (line_start.lat, line_start.lon)
-        end_point = (line_end.lat, line_end.lon)
+        d1 = cross(p3, p4, p1)
+        d2 = cross(p3, p4, p2)
+        d3 = cross(p1, p2, p3)
+        d4 = cross(p1, p2, p4)
 
-        # 计算两个点相对于线段的位置
-        prev_side = cross(start_point, end_point, prev_point)
-        curr_side = cross(start_point, end_point, curr_point)
-
-        # 如果两侧符号不同，说明跨越了线段
-        if prev_side * curr_side < 0:
+        # 1. 判断点是否在线段上
+        # 点 p1 在线段 p3-p4 上
+        if abs(d1) < tolerance and min(p3[0], p4[0]) <= p1[0] <= max(p3[0], p4[0]) and \
+                min(p3[1], p4[1]) <= p1[1] <= max(p3[1], p4[1]):
             return True
 
-        # 处理边界情况（点在线段上）
-        if abs(prev_side) < 1e-10 or abs(curr_side) < 1e-10:
+        # 点 p2 在线段 p3-p4 上
+        if abs(d2) < tolerance and min(p3[0], p4[0]) <= p2[0] <= max(p3[0], p4[0]) and \
+                min(p3[1], p4[1]) <= p2[1] <= max(p3[1], p4[1]):
+            return True
+
+        # 点 p3 在线段 p1-p2 上
+        if abs(d3) < tolerance and min(p1[0], p2[0]) <= p3[0] <= max(p1[0], p2[0]) and \
+                min(p1[1], p2[1]) <= p3[1] <= max(p1[1], p2[1]):
+            return True
+
+        # 点 p4 在线段 p1-p2 上
+        if abs(d4) < tolerance and min(p1[0], p2[0]) <= p4[0] <= max(p1[0], p2[0]) and \
+                min(p1[1], p2[1]) <= p4[1] <= max(p1[1], p2[1]):
+            return True
+
+        # 2. 判断两条线段是否相交（跨立实验）
+        # 两条线段相互跨立
+        if d1 * d2 < 0 and d3 * d4 < 0:
+            return True
+
+        # 3. 处理点在线段延长线上的情况（利用包围盒判断）
+        # 如果叉积为0且点在线段的包围盒内，视为相交
+        if abs(d1) < tolerance and min(p3[0], p4[0]) <= p1[0] <= max(p3[0], p4[0]) and \
+                min(p3[1], p4[1]) <= p1[1] <= max(p3[1], p4[1]):
+            return True
+
+        if abs(d2) < tolerance and min(p3[0], p4[0]) <= p2[0] <= max(p3[0], p4[0]) and \
+                min(p3[1], p4[1]) <= p2[1] <= max(p3[1], p4[1]):
             return True
 
         return False
+
+
 
     def _calculate_distance_to_line(self, point: Tuple[float, float],
                                     line_start: Tuple[float, float],

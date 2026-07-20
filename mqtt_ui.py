@@ -42,8 +42,11 @@ class MQTTControlWidget(QWidget):
         self.connect_signals()
         self.mqtt_manager.connect()
 
+        # 存储LED信息
+        self.leds = {}  # led_id -> LEDInfo
 
-
+        # 存储LED状态主题映射（用于快速查找）
+        self.led_topic_map = {}  # receive_topic -> led_id
 
         # 添加定时器，定期清理离线船舶
         self.cleanup_timer = QTimer()
@@ -361,20 +364,27 @@ class MQTTControlWidget(QWidget):
         # 在日志中显示
 
         try:
-
-            # 不是JSON格式，作为普通文本处理
             formatted_msg = message[:200]
+
+            if topic in self.mqtt_manager.message_handlers:
+                callback = self.mqtt_manager.message_handlers[topic]
+                callback(topic, message)
 
             # 检查是否是AIS主题
             if 'ais/dynamic' in topic.lower():
                 # 假设AIS消息可能是逗号分隔的文本格式
 
                 self.process_ais_message(topic, message)
+
+
         except Exception as e:
             print(f"处理消息时出错: {e}")
-            formatted_msg = message[:200]
+
         self.log_text.append(f"📩 [{topic}] {formatted_msg}")
 
+    def _is_led_status_topic(self, topic: str) -> bool:
+        """判断是否是LED状态主题"""
+        return topic in self.mqtt_manager.message_handlers
 
 
     def process_ais_message(self, topic: str, message: str):

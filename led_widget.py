@@ -6,6 +6,8 @@ import os
 
 from PyQt5.QtGui import QMovie
 
+from led_manager import LEDInfo
+
 
 class LEDWidget(QWidget):
     """单个LED灯控制控件"""
@@ -21,18 +23,24 @@ class LEDWidget(QWidget):
 
     def __init__(self, led_info, led_manager, parent=None):
         super().__init__(parent)
+        # 存储动画对象
+        self.movie = None
         self.led_info = led_info
         self.led_manager = led_manager
         self.setFixedHeight(100)
         self.setMinimumWidth(280)
         self.setVisible(True)
 
-        # 存储动画对象
-        self.movie = None
+
 
         self.init_ui()
         # 保存初始状态，等显示后再更新
         self.initial_status = self.led_info.status
+
+        # 连接信号
+        self.led_manager.led_connection_changed.connect(self.on_connection_changed)
+        self.led_manager.led_status_changed.connect(self.on_status_changed)
+
         print(f"LEDWidget 创建: {led_info.led_name}, 可见: {self.isVisible()}")
 
     def init_ui(self):
@@ -74,8 +82,19 @@ class LEDWidget(QWidget):
             font-weight: bold; 
             color: #2c3e50;
         """)
+
+        # 更新名称颜色（根据当前连接状态）
+        self.update_name_color()
+
         self.name_label.setMinimumHeight(25)
         control_layout.addWidget(self.name_label)
+
+        # 连接状态显示（小标签）
+        self.connection_label = QLabel()
+        self.connection_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.connection_label.setStyleSheet("font-size: 10px; color: #7f8c8d;")
+        self.update_connection_label()
+        control_layout.addWidget(self.connection_label)
 
         # 2. 控制下拉框
         self.status_combo = QComboBox()
@@ -126,6 +145,9 @@ class LEDWidget(QWidget):
         # 添加弹性空间，让控件在垂直方向上居中
         control_layout.addStretch()
 
+        self.status_combo.setVisible(False)
+        self.send_btn.setVisible(False)
+        
         # 添加到主布局
         main_layout.addWidget(icon_container)
         main_layout.addWidget(control_container, 1)
@@ -145,6 +167,109 @@ class LEDWidget(QWidget):
 
         # 更新显示
         self.update_status_display(self.led_info.status)
+        # self.update_connection_display(self.led_info)
+
+    def update_name_color(self):
+        """根据连接状态更新名称颜色"""
+        color = self.led_info.get_connection_color()
+        # 根据颜色选择文字颜色
+        self.name_label.setStyleSheet(f"""
+            font-size: 14px; 
+            font-weight: bold; 
+            color: {color};
+        """)
+
+    def update_connection_label(self):
+        """更新连接状态标签"""
+        status = self.led_info.get_connection_status()
+        color = self.led_info.get_connection_color()
+        self.connection_label.setText(f"连接: {status}")
+        self.connection_label.setStyleSheet(f"""
+            font-size: 10px; 
+            color: {color};
+            font-weight: bold;
+        """)
+
+    def update_connection_display(self, led_info: LEDInfo):
+        """更新连接状态显示"""
+        status_text = led_info.get_connection_status()
+        color = led_info.get_connection_color()
+
+        # 更新名称颜色
+        if led_info.mqtt_connected and led_info.lora_connected:
+            self.name_label.setStyleSheet("""
+                font-size: 14px; 
+                font-weight: bold; 
+                color: #27ae60;
+            """)
+            #self.status_text.setText(f"{status_text} - {led_info.get_status_text()}")
+        elif led_info.mqtt_connected:
+            self.name_label.setStyleSheet("""
+                font-size: 14px; 
+                font-weight: bold; 
+                color: #3498db;
+            """)
+            #self.status_text.setText(f"MQTT - {led_info.get_status_text()}")
+        elif led_info.lora_connected:
+            self.name_label.setStyleSheet("""
+                font-size: 14px; 
+                font-weight: bold; 
+                color: #2ecc71;
+            """)
+            #self.status_text.setText(f"LoRa - {led_info.get_status_text()}")
+        else:
+            self.name_label.setStyleSheet("""
+                font-size: 14px; 
+                font-weight: bold; 
+                color: #e74c3c;
+                background-color: #ffebee;
+                border-radius: 4px;
+                padding: 2px 5px;
+            """)
+            #self.status_text.setText("断开连接")
+            #self.status_text.setStyleSheet("font-size: 12px; color: #e74c3c; font-weight: bold;")
+
+    def update_connection_status(self, connected: bool):
+        """更新LED连接状态显示"""
+        if connected:
+            # 恢复正常样式
+            self.name_label.setStyleSheet("""
+                   font-size: 14px; 
+                   font-weight: bold; 
+                   color: #2c3e50;
+               """)
+            self.setStyleSheet("""
+                   LEDWidget {
+                       background-color: #f8f9fa;
+                       border-radius: 8px;
+                       border: 1px solid #dee2e6;
+                   }
+               """)
+        else:
+            # 断开连接：红色凸显
+            self.name_label.setStyleSheet("""
+                   font-size: 14px; 
+                   font-weight: bold; 
+                   color: #e74c3c;
+                   background-color: #ffebee;
+                   border-radius: 4px;
+                   padding: 2px 5px;
+               """)
+            # 状态显示为"断开"
+            self.status_label.setText("断开")
+            self.status_label.setStyleSheet("font-size: 12px; color: #e74c3c; font-weight: bold;")
+
+    def on_connection_changed(self, led_id: str, connection_status: str):
+        """连接状态变化回调"""
+        if led_id == self.led_info.led_id:
+            self.update_name_color()
+            self.update_connection_label()
+            print(f"🔗 LED {self.led_info.led_name} 连接状态: {connection_status}")
+
+    def on_status_changed(self, led_id: str, status: int):
+        """状态变化回调"""
+        if led_id == self.led_info.led_id:
+            self.update_status_display(status)
 
     def update_status_display(self, status: int):
         """更新状态显示"""

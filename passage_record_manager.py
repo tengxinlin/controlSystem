@@ -115,6 +115,25 @@ class PassageRecordManager(QObject):
         enter_time = time_value or int(time.time())
         return self.update_record(mmsi, enter_channel_time=enter_time)
 
+    def record_signal_channel(self, mmsi: str, type:int,time_value: int = None) -> bool:
+        """
+        记录信号揭示时间
+
+        Args:
+            mmsi: 船舶MMSI
+            type:1起卦，补充2，半杆3
+            time_value: 时间戳，默认当前时间
+        """
+        start_hang_time = time_value or int(time.time())
+        if type == 1:
+            return self.update_record(mmsi, start_hang_time=start_hang_time)
+        elif type == 2:
+            return self.update_record(mmsi, supplement_time=start_hang_time)
+        else:
+            return self.update_record(mmsi, half_pole_time=start_hang_time)
+
+
+
     def record_exit_channel(self, mmsi: str, time_value: int = None) -> bool:
         """
         记录出漕时间（船舶离开控制河段），完成通行记录
@@ -133,7 +152,7 @@ class PassageRecordManager(QObject):
             if mmsi in self._active_cache:
                 del self._active_cache[mmsi]
             self.record_completed.emit(mmsi)
-            print(f"船舶 {mmsi} 通行记录完成")
+
 
         return success
 

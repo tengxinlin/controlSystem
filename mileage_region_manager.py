@@ -559,14 +559,14 @@ class MileageRegionManager:
                 target_region = region
                 break
         if not target_region:
-            return {}
+            return {'direction':'unknown'}
 
         # 2. 在目标区域的细分点中找到最近的索引
         region_id = target_region.region_id
         sub_areas = self.subdivision_areas.get(region_id, [])
 
         if not sub_areas:
-            return {}
+            return {'direction':'unknown'}
 
             # 查找船舶所在的细分区域
         target_sub_area = None

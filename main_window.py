@@ -9,7 +9,7 @@ import folium
 import tempfile
 import os
 
-from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtGui import QBrush, QColor, QTextCursor
 from PyQt5.QtWebEngineWidgets import QWebEngineSettings
 from sqlalchemy import false
 
@@ -21,8 +21,9 @@ from mileage_region_manager import MileageRegionManager
 from passage_record_edit_dialog import PassageRecordEditDialog
 from passage_record_manager import PassageRecordManager
 from queue_manager import QueueManager
-from queue_updater import QueueProcessor
+from queue_timer_processor import QueueTimerProcessor
 from ship_manager import ShipInfo
+from signal_confirm_dialog import SignalConfirmDialog
 from sqlite3Manager import SQLiteTableManager
 
 # 或者禁用硬件加速
@@ -31,7 +32,8 @@ os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLineEdit, QLabel, QMessageBox, QGridLayout, QTableWidgetItem, QHeaderView, QTableWidget)
+                             QLineEdit, QLabel, QMessageBox, QGridLayout, QTableWidgetItem, QHeaderView, QTableWidget,
+                             QDialog)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, pyqtSignal, QObject, Qt, center, QTimer, QDateTime
 from PyQt5.QtWebChannel import QWebChannel
@@ -174,12 +176,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 创建队列管理器
         from queue_manager import QueueManager
-        self.queue_manager = QueueManager(self.passage_record_manager)
+        self.queue_manager = QueueManager(self.passage_record_manager,self.get_current_signal,self.log_message,self.current_reach)
 
         # 创建队列处理器
         self.queue_processor = None
-        self.start_queue_processor()
-        self.current_signal='关闭'  #控制河段的信号
+        self.current_signal = '关闭'  # 控制河段的信号,关闭，上水，下水，半杆，禁航
 
         #api接口
         self.api = api_service
@@ -200,7 +201,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setup_web_channel()
 
         # 初始化LED管理器
-        self.led_manager = LEDManager(self.db_manager, self.mqtt_widget.mqtt_manager)
+        self.led_manager = LEDManager(self.db_manager, self.mqtt_widget.mqtt_manager,self.log_message)
 
         # 初始化LED相关变量
         self.led_widgets = []  # 存储LED控件
@@ -209,9 +210,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 假设你的 QWidget 名字是 widget_led_container
         self.init_led_container()
 
-        # 连接LED状态变化信号
-        self.led_manager.led_status_changed.connect(self.on_led_status_changed)
-        # self.mqtt_widget.show()
+        # # 连接LED状态变化信号
+        # self.led_manager.led_status_changed.connect(self.on_led_status_changed)
+        # self.led_manager.led_connection_changed.connect(self.on_led_connection_changed)
+        # # self.mqtt_widget.show()
 
         #初始化后选择combox
         river = self.db_manager.search_records("Reaches", {"ReachCode": self.reachCode})
@@ -220,31 +222,252 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.comboBox.setCurrentText("0")
         self.comboBox.setCurrentText(river[0].get("ReachName"))
 
+        # 当前需要揭示信号的船舶信息
+        self.pending_signal_mmsi=None
+        self.pending_signal_ship = None
+        self.pending_signal_type = None
+        self.signal_dialog = None  # 保存对话框引用
+
+
+
+
+
     def get_current_signal(self) -> str:
         """
         获取当前控制河段信号
 
         Returns:
-            'up': 上水信号
-            'down': 下水信号
-            'off': 关闭
+            '上水': 上水信号
+            '下水': 下水信号
+            '关闭': 关闭信号
+            '半杆': 半杆信号
         """
         # 这里根据实际情况返回当前信号
         # 可以从LED灯状态、信号控制界面等获取
         return self.current_signal
 
     def start_queue_processor(self):
-        """启动队列处理器"""
-        self.queue_processor = QueueProcessor(self.queue_manager, self.get_current_signal)
+        """启动队列定时器处理器"""
+        print("正在启动队列定时器处理器...")
+
+        self.queue_processor = QueueTimerProcessor(
+            self.queue_manager,
+            self.get_current_signal,
+            parent=self
+        )
 
         # 连接信号
         self.queue_processor.pending_updated.connect(self.update_pending_table)
         self.queue_processor.commanded_updated.connect(self.update_commanded_table)
         self.queue_processor.control_area_updated.connect(self.update_control_area_table)
+        self.queue_processor.show_signal_dialog.connect(self.show_signal_confirm_dialog)
 
-        # 启动线程
+        # 启动定时器
         self.queue_processor.start()
-        print("队列处理器已启动，每15秒处理一次")
+
+        print("队列定时器处理器已启动")
+
+    def show_signal_confirm_dialog(self,mmsi:str, ship_name: str, signal_type: str):
+        """显示信号确认对话框"""
+        # 如果已经有对话框打开，先关闭旧的
+        if self.signal_dialog and self.signal_dialog.isVisible():
+            print("已有对话框打开，关闭旧对话框")
+            self.signal_dialog.close()
+
+        self.pending_signal_mmsi = mmsi
+        self.pending_signal_ship = ship_name
+        self.pending_signal_type = signal_type
+
+        # 创建对话框
+        self.signal_dialog = SignalConfirmDialog(mmsi,ship_name, signal_type, timeout_seconds=10, parent=self)
+
+        # 连接信号
+        self.signal_dialog.confirmed.connect(self.on_signal_confirmed)
+        self.signal_dialog.cancelled.connect(self.on_signal_cancelled)
+        self.signal_dialog.timeout.connect(self.on_signal_timeout)
+
+        # 对话框关闭时通知处理器
+        self.signal_dialog.finished.connect(self.on_dialog_finished)
+
+        # 显示对话框
+        self.signal_dialog.show()
+
+    def on_signal_confirmed(self,mmsi,signal):
+        """用户确认揭示信号"""
+        if self.pending_signal_ship and self.pending_signal_type:
+            self.log_message(f"✅ 用户确认揭示信号: {self.pending_signal_ship} -> {self.pending_signal_type}")
+
+            if signal == self.current_signal:
+                #要揭示的信号等于当前信号，记录补充时间
+                self.passage_record_manager.record_signal_channel(mmsi,2)
+            elif signal != self.pending_signal_mmsi  and signal != '半杆':
+                # 要揭示的信号不等于当前信号，记录起卦时间
+                self.passage_record_manager.record_signal_channel(mmsi, 1)
+            else:
+                #半杆信号
+                self.passage_record_manager.record_signal_channel(mmsi, 3)
+
+            # 发送MQTT信号
+            self.send_mqtt_signal(self.pending_signal_type, self.pending_signal_ship)
+
+            #发送信号后更新当前信号
+            self.current_signal = signal
+
+            self.label_signal.setText(signal)
+            self.label_current_signal.setText(signal)
+
+            # 从待指挥队列移到已指挥队列
+            self._update_ship_signal_revealed(self.pending_signal_ship, self.pending_signal_type)
+
+            # 记录日志
+            self.log_message(f"揭示信号: {self.pending_signal_ship} - {self.pending_signal_type}")
+
+    def on_signal_cancelled(self):
+        """用户取消揭示信号"""
+        if self.pending_signal_ship:
+            print(f"❌ 用户取消揭示信号: {self.pending_signal_ship}")
+
+            # 在队列处理器中阻止该船舶2分钟内再次弹窗
+            if self.queue_processor:
+                # 需要找到该船舶的MMSI
+                mmsi = self._get_ship_mmsi_by_name(self.pending_signal_ship)
+                if mmsi:
+                    self.queue_processor._block_ship(mmsi)
+
+            self.log_message(f"取消揭示信号: {self.pending_signal_ship}")
+
+    def on_signal_timeout(self):
+        """倒计时结束"""
+        print(f"⏰ 倒计时结束，自动确认揭示信号: {self.pending_signal_ship}")
+        # 自动确认
+        self.on_signal_confirmed(self.pending_signal_mmsi)
+
+    def on_dialog_finished(self):
+        """对话框关闭时的处理"""
+        if self.queue_processor:
+            # 通知处理器对话框已关闭
+            self.queue_processor.on_dialog_closed()
+
+        self.pending_signal_ship = None
+        self.pending_signal_type = None
+        self.signal_dialog = None
+
+    def send_mqtt_signal(self, signal_type: str, ship_name: str = None):
+        """
+        发送控制信号（同时通过 MQTT 和 LoRa 控制所有灯）
+
+        Args:
+            signal_type: 信号类型 ('上水', '下水', '半杆', '关闭','禁航')
+            ship_name: 船舶名称（可选）
+        """
+        # 信号类型映射到状态码
+        signal_map = {
+            '禁航':0, #禁航信号
+            '上水': 1,  # 上水信号
+            '下水': 2,  # 下水信号
+            '半杆': 3,  # 半杆信号
+            '关闭': 4  # 关闭信号
+        }
+
+        status = signal_map.get(signal_type, 4)
+
+        # 获取当前控制河段的所有 LED
+        if not hasattr(self, 'led_manager') or not self.led_manager:
+            print("❌ LED 管理器未初始化")
+            return
+
+        # 获取当前控制河段的 LED 列表
+        current_reach_code = self.reachCode if hasattr(self, 'reachCode') else None
+        if not current_reach_code:
+            print("❌ 未获取到当前控制河段代码")
+            return
+
+        leds = self.led_manager.reach_leds.get(current_reach_code, [])
+        if not leds:
+            print(f"⚠️ 控制河段 {current_reach_code} 没有 LED 灯")
+            return
+
+        # ========== 发送 MQTT 控制指令 ==========
+        mqtt_success_count = 0
+        lora_success_count = 0
+
+        for led in leds:
+            # 1. 通过 MQTT 发送（如果 LED 有 MQTT 发布主题）
+            if led.publish_topic:
+                try:
+                    mqtt_message = str(status)
+                    result = self.mqtt_widget.mqtt_manager.publish(led.publish_topic, mqtt_message)
+                    if result:
+                        mqtt_success_count += 1
+                        print(f"📡 MQTT [{led.led_name}]: {led.get_status_text()}")
+                except Exception as e:
+                    print(f"❌ MQTT 控制 {led.led_name} 失败: {e}")
+
+            # 2. 通过 LoRa 发送（如果 LED 有 LoRa 信息）
+            if led.lora_id and led.lora_publish:
+                try:
+                    # LoRa 命令格式: "command loraid 灯序号 状态码"
+                    lora_message = f"command {led.lora_id} {led.lora_index} {status}"
+                    result = self.mqtt_widget.mqtt_manager.publish(led.lora_publish, lora_message)
+                    if result:
+                        lora_success_count += 1
+                        print(f"📡 LoRa [{led.led_name}]: {led.get_status_text()}")
+                except Exception as e:
+                    print(f"❌ LoRa 控制 {led.led_name} 失败: {e}")
+
+        # 记录发送结果
+        total_leds = len(leds)
+        print(f"\n📤 信号发送完成:")
+        print(f"   信号类型: {signal_type} (状态码: {status})")
+        print(f"   控制河段: {current_reach_code}")
+        print(f"   LED总数: {total_leds}")
+        print(f"   MQTT成功: {mqtt_success_count}")
+        print(f"   LoRa成功: {lora_success_count}")
+
+        # 如果有船舶名称，记录日志
+        if ship_name:
+            self.log_message(f"发送 {signal_type} 信号，船舶: {ship_name}")
+        else:
+            self.log_message(f"发送 {signal_type} 信号")
+
+        return mqtt_success_count + lora_success_count
+
+    def _update_ship_signal_revealed(self, ship_name: str, signal_type: str):
+        """更新船舶的揭示状态 - 从待指挥队列移到已指挥队列"""
+        # 找到待指挥队列中的对应船舶
+        ships = self.queue_manager.get_pending_list()
+        target_ship = None
+        target_mmsi = None
+
+        for ship in ships:
+            if ship.get('name') == ship_name:
+                target_ship = ship.copy()
+                target_mmsi = ship.get('mmsi')
+                break
+
+        if target_ship and target_mmsi:
+            # 更新揭示信息
+            target_ship['signal_revealed'] = True
+            target_ship['reveal_time'] = time.time()
+            target_ship['reveal_signal'] = signal_type
+            target_ship['command_time'] = time.time()  # 记录指挥时间
+
+            # 从待指挥队列移除
+            self.queue_manager.remove_from_pending(target_mmsi)
+
+            # 添加到已指挥队列
+            self.queue_manager.add_to_commanded(target_mmsi, target_ship)
+
+            print(f"✅ 船舶 {ship_name} ({target_mmsi}) 已从待指挥队列移到已指挥队列，信号: {signal_type}")
+
+    def _get_ship_mmsi_by_name(self, ship_name: str) -> str:
+        """根据船名获取MMSI"""
+        ships = self.queue_manager.get_pending_list()
+        for ship in ships:
+            if ship.get('name') == ship_name:
+                return ship.get('mmsi')
+        return None
+
     # 在主窗口初始化时设置
     def setup_web_channel(self):
         # 创建桥接对象
@@ -363,19 +586,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             import traceback
             traceback.print_exc()
 
-    def on_led_status_changed(self, led_id: int, status: int):
-        """LED状态变化回调"""
-        # 更新对应的LED控件显示
-        for widget in self.led_widgets:
-            if widget.led_info.led_id == led_id:
-                widget.update_status_display(status)
-                break
-
-        # 记录日志
-        led = self.led_manager.leds.get(led_id)
-        if led:
-            status_texts = {0: "禁航", 1: "上水", 2: "下水", 3: "半杆", 4: "关闭"}
-            self.log_message(f"LED状态变化: {led.led_name} -> {status_texts.get(status, '未知')}")
 
     def edit_ship_passage_record(self, mmsi: str,name:str):
         """
@@ -430,7 +640,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def log_message(self, message: str):
         """
-        记录系统日志消息
+        记录系统日志消息（最新消息显示在顶部）
 
         Args:
             message: 日志消息内容
@@ -442,30 +652,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 格式化消息
         log_line = f"[{time_str}] {message}\n"
 
-        # 获取当前文本光标
-        cursor = self.plainTextEdit.textCursor()
-        cursor.movePosition(cursor.End)
+        # 获取当前文档
+        doc = self.plainTextEdit.document()
 
-        # 插入文本
+        # 如果有内容且超过最大行数限制，删除最后一行
+        if self.current_log_lines >= self.max_log_lines:
+            # 删除最后一行
+            cursor = self.plainTextEdit.textCursor()
+            cursor.movePosition(cursor.End)
+            cursor.select(QTextCursor.BlockUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()  # 删除换行符
+            self.current_log_lines -= 1
+
+        # 在开头插入新消息
+        cursor = self.plainTextEdit.textCursor()
+        cursor.movePosition(cursor.Start)
         cursor.insertText(log_line)
 
         # 更新行数计数
         self.current_log_lines += 1
 
-        # 如果超过最大行数，删除最前面的行
-        if self.current_log_lines > self.max_log_lines:
-            # 获取文档
-            doc = self.plainTextEdit.document()
-            # 删除第一行
-            cursor = self.plainTextEdit.textCursor()
-            cursor.movePosition(cursor.Start)
-            cursor.select(cursor.BlockUnderCursor)
-            cursor.removeSelectedText()
-            cursor.deleteChar()  # 删除换行符
-            self.current_log_lines -= 1
-
-        # 自动滚动到底部
+        # 滚动到顶部（显示最新消息）
         self.plainTextEdit.ensureCursorVisible()
+        self.plainTextEdit.moveCursor(QTextCursor.Start)
 
     def clear_log(self):
         """清空日志"""
@@ -487,7 +697,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         print(f"新通行记录创建: {mmsi}")
 
     def on_record_completed(self, mmsi):
-        print(f"通行记录完成: {mmsi}")
+        self.log_message(f"通行记录完成: {mmsi}")
 
 
     def on_record_saved(self, record):
@@ -570,6 +780,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from map_ship_drawer import MapShipDrawer
         self.ship_drawer = MapShipDrawer(self.webView)
 
+
+
         # 当页面加载完成后，设置地图
         self.webView.loadFinished.connect(self.on_load_finished)
 
@@ -615,6 +827,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     """)
             # 在这里进行你的初始化操作
             self.initialize_with_reach_data(self.controlRivername,self.reachCode)
+
+
 
         else:
             print("页面加载失败")
@@ -799,12 +1013,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.loadMap()
 
-            # 加载LED灯
-            self.load_leds_for_reach(self.reachCode)
-
-
-
-
 
         else:
             print(f"未找到河段 {reach_name} 对应的TeachCode")
@@ -938,6 +1146,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print("MQTT 控件已重新创建并连接")
 
 
+            #设置新的queue_manager
+            self.queue_manager = QueueManager(self.passage_record_manager, self.get_current_signal, self.log_message,
+                                              self.current_reach)
+
+
+            # 初始化LED管理器
+            self.led_manager = LEDManager(self.db_manager, self.mqtt_widget.mqtt_manager,self.log_message)
+
+
+            # 加载LED灯
+            self.load_leds_for_reach(self.reachCode)
+
+            # LED连接状态监控定时器（每6分钟检查一次）
+            self.led_check_timer = QTimer(self)
+            self.led_check_timer.timeout.connect(self.check_led_connection_status)
+            self.led_check_timer.start(60000)  # 1分钟 = 360000毫秒
+
+            # # 连接LED状态信号
+            # if hasattr(self, 'led_manager'):
+            #     self.led_manager.led_connection_changed.connect(self.on_led_connected)
+            #     self.led_manager.led_status_changed.connect(self.on_led_status_changed)
+
+            self.start_queue_processor()
+            self.current_signal = '关闭'  # 控制河段的信号
+
             js = f"setMapView({reach.center_point.lat}, {reach.center_point.lon}, {14});"
             self.webView.page().runJavaScript(js)
             print(f"设置地图中心: ")
@@ -960,6 +1193,62 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             traceback.print_exc()
             return None
 
+    def check_led_connection_status(self):
+        """检查LED连接状态"""
+        if hasattr(self, 'led_manager'):
+            changed = self.led_manager.check_led_connections()
+            if changed > 0:
+                print(f"检测到 {changed} 个 LED 连接状态变化")
+
+
+
+    def on_led_disconnected(self, led_id: str, led_name: str):
+        """LED断开连接"""
+        print(f"❌ LED {led_name} ({led_id}) 连接断开")
+        self.log_message(f"LED {led_name} 连接断开，已关闭")
+
+        # 更新LED控件显示（红色凸显）
+        self._update_led_widget_style(led_id, connected=False)
+
+    def on_led_status_changed(self, led_id: str, status: int):
+        """LED状态变化"""
+        # 更新LED控件显示
+        self._update_led_widget_status(led_id, status)
+        # 记录日志
+        led = self.led_manager.leds.get(led_id)
+        if led:
+            status_texts = {0: "禁航", 1: "上水", 2: "下水", 3: "半杆", 4: "关闭"}
+            self.log_message(f"LED状态变化: {led.led_name} -> {status_texts.get(status, '未知')}")
+
+    def _update_led_widget_style(self, led_id: str, connected: bool):
+        """更新LED控件样式"""
+        for widget in self.led_widgets:
+            if widget.led_info.led_id == led_id:
+                if connected:
+                    # 恢复正常样式
+                    widget.name_label.setStyleSheet("""
+                           font-size: 14px; 
+                           font-weight: bold; 
+                           color: #2c3e50;
+                       """)
+                else:
+                    # 断开连接：红色凸显
+                    widget.name_label.setStyleSheet("""
+                           font-size: 14px; 
+                           font-weight: bold; 
+                           color: #e74c3c;
+                           background-color: #ffebee;
+                           border-radius: 4px;
+                           padding: 2px 5px;
+                       """)
+                break
+
+    def _update_led_widget_status(self, led_id: str, status: int):
+        """更新LED控件状态显示"""
+        for widget in self.led_widgets:
+            if widget.led_info.led_id == led_id:
+                widget.update_status_display(status)
+                break
     def load_channel_mileage_for_reach(self, reach: ControlReach,
                                        upstream_count: int = 20,
                                        downstream_count: int = 10):
@@ -1251,7 +1540,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def update_commanded_table(self, ships):
         """更新已指挥队列表格"""
         # 设置列数
-        columns = 5
+        columns = 4
         self.tableWidget_command.setColumnCount(columns)
 
         # 设置表头
@@ -1325,7 +1614,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def update_control_area_table(self, ships):
         """更新控制河段队列表格"""
         # 设置列数
-        columns = 5
+        columns = 4
         self.tableWidget_control.setColumnCount(columns)
 
         # 设置表头
@@ -1361,7 +1650,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.tableWidget_control.setItem(row, 0, name_item)
 
             # 3. 航向
-            direction = ship.get('direction', 'unknown')
+            direction = ship.get('status', 'unknown')
             direction_text = "上水" if direction == 'up' else "下水" if direction == 'down' else "未知"
             dir_item = QTableWidgetItem(direction_text)
             dir_item.setTextAlignment(Qt.AlignCenter)
@@ -1372,7 +1661,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.tableWidget_control.setItem(row, 1, dir_item)
 
             # 4. 进入时间
-            enter_time = ship.get('enter_control_time', 0)
+            enter_time = ship.get('enter_channel_time', 0)
             if enter_time > 0:
                 time_str = datetime.fromtimestamp(enter_time).strftime('%H:%M:%S')
                 enter_time_item = QTableWidgetItem(time_str)
@@ -1471,19 +1760,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 if mmsi in self.queue_manager.pending_queue:
                     self.queue_manager.pending_queue[mmsi]['name'] = new_name
                     self.queue_manager.pending_queue[mmsi]['status'] = new_status
-                    self.queue_manager.pending_queue_changed.emit()
+
 
                 # 更新已指挥队列中的船舶信息
                 if mmsi in self.queue_manager.commanded_queue:
                     self.queue_manager.commanded_queue[mmsi]['name'] = new_name
                     self.queue_manager.commanded_queue[mmsi]['status'] = new_status
-                    self.queue_manager.commanded_queue_changed.emit()
+
 
                 # 更新控制区域队列中的船舶信息
                 if mmsi in self.queue_manager.control_area_queue:
                     self.queue_manager.control_area_queue[mmsi]['name'] = new_name
                     self.queue_manager.control_area_queue[mmsi]['status'] = new_status
-                    self.queue_manager.control_area_queue_changed.emit()
+
 
 
         except Exception as e:
