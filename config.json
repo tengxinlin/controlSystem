@@ -15,11 +15,14 @@
         "theme": "light"
     },
     "login": {
-        "IP_address": "http://isc.cqu.edu.cn:23456",
         "remember_password": true,
         "last_username": "梁山",
         "last_password": "Cqhdj@2024"
     },
+    "network": {
+              "internal": {"ip": "http://172.18.17.149:2504", "name": "内网"},
+                 "external": {"ip": "http://isc.cqu.edu.cn:2504", "name": "外网"}
+            },
     "controlRiverName": "铜锣峡",
     "reachCode": 35,
     "weather": "晴",

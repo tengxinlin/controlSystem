@@ -52,7 +52,7 @@ from config import ConfigManager  # 假设 config_manager.py 在同一目录
 from mqtt_ui import MQTTControlWidget
 
 class MainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self,api_service,username):
+    def __init__(self,api_service,username,network_type):
         """
                主窗口构造函数
                :param api_service: 已登录的APIService实例
@@ -65,6 +65,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.reaches = None
         self.setupUi(self)  # 加载 UI 界面
         self.username = username
+        self.network_type = network_type
 
         # 获取屏幕尺寸
         screen = QApplication.primaryScreen()
@@ -1851,28 +1852,28 @@ if __name__ == "__main__":
     app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     # 在程序入口（创建 QApplication 后）添加：
     os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
-    # # 创建登录对话框（不创建主窗口）
-    # login_dialog = LoginDialog()
-    # # 定义登录成功后的回调函数
-    # def on_login_success(api_service, username):
-    #     """登录成功后创建并显示主窗口"""
-    #
-    #     main_window = MainWindow(api_service, username)
-    #     main_window.show()
-    #     login_dialog.close()
-    #
-    #     # 连接登录成功信号
-    #
-    # # 先信号与槽连接，在展示对话框
-    # login_dialog.login_success.connect(on_login_success)
-    #
-    # # 显示登录对话框
-    # login_dialog.show()
+    # 创建登录对话框（不创建主窗口）
+    login_dialog = LoginDialog()
+    # 定义登录成功后的回调函数
+    def on_login_success(api_service, username,network_type):
+        """登录成功后创建并显示主窗口"""
 
-    api_service = APIService("http://isc.cqu.edu.cn:23456")
-    api_service.login("梁山","Cqhdj@2024")
-    main_window = MainWindow(api_service, "username")
-    main_window.show()
+        main_window = MainWindow(api_service, username,network_type)
+        main_window.show()
+        login_dialog.close()
+
+        # 连接登录成功信号
+
+    # 先信号与槽连接，在展示对话框
+    login_dialog.login_success.connect(on_login_success)
+
+    # 显示登录对话框
+    login_dialog.show()
+
+    # api_service = APIService("http://isc.cqu.edu.cn:23456")
+    # api_service.login("梁山","Cqhdj@2024")
+    # main_window = MainWindow(api_service, "username")
+    # main_window.show()
 
 
 

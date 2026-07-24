@@ -1,8 +1,9 @@
 # login_dialog.py
+import os
 import sys
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QCheckBox, QPushButton, QMessageBox,
-                             QApplication, QFrame, QWidget)
+                             QApplication, QFrame, QWidget, QRadioButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QColor, QIcon
 from config import ConfigManager
@@ -33,19 +34,45 @@ class LoginThread(QThread):
 
 class LoginDialog(QDialog):
     # 定义登录成功信号，可以传递用户名
-    login_success = pyqtSignal(object, str)  # 传递APIService实例和用户名
+    login_success = pyqtSignal(object, str,str)  # 传递APIService实例和用户名和网络类型
 
     def __init__(self, parent=None):
         super().__init__(parent)
         # 设置为模态对话框
         self.setModal(True)
         self.config_mgr = ConfigManager()
-        ipaddress=self.config_mgr.get('login', 'IP_address', default='')
-        # 如果外部传入了APIService实例则使用，否则创建新的
-        self.api_service =  APIService(ipaddress)
+
+        # 从配置文件读取网络配置
+        self.network_config = self._load_network_config()
+
+        # 默认使用内网IP
+        default_ip = self.network_config.get('external', {}).get('ip', '')
+        self.api_service = APIService(default_ip)
+
+        self.selected_network = 'external'  # 默认外网
+        self.password_visible = False  # 密码是否可见
 
         self.init_ui()
         self.load_saved_credentials()
+
+    def _load_network_config(self):
+        """从配置文件加载网络配置"""
+        # 从配置文件读取内网和外网IP
+        # 配置格式：
+        # {
+        #     "network": {
+        #         "internal": {"ip": "http://172.18.17.149:2504", "name": "内网"},
+        #         "external": {"ip": "http://isc.cqu.edu.cn:2504", "name": "外网"}
+        #     }
+        # }
+        network_config = self.config_mgr.get('network', default={})
+        if not network_config:
+            # 如果配置不存在，使用默认值
+            network_config = {
+                "internal": {"ip": "http://172.18.17.149:2504", "name": "内网"},
+                "external": {"ip": "http://isc.cqu.edu.cn:2504", "name": "外网"}
+            }
+        return network_config
 
     def init_ui(self):
         """初始化UI"""
@@ -59,100 +86,114 @@ class LoginDialog(QDialog):
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(40, 40, 40, 40)
 
-        # 添加Logo区域（可选）
+        # ========== Logo区域（使用本地图片）==========
         logo_label = QLabel()
         logo_label.setAlignment(Qt.AlignCenter)
-        logo_label.setText("🚢")  # 可以用图标或图片
-        logo_label.setStyleSheet("font-size: 80px; color: #2c3e50;")
-        main_layout.addWidget(logo_label)
+        logo_label.setFixedSize(150, 150)
+
+        # 加载本地图片（请将 logo.png 放在项目目录下）
+        logo_path = self._get_logo_path()
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            if not pixmap.isNull():
+                scaled_pixmap = pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                logo_label.setPixmap(scaled_pixmap)
+            else:
+                # 如果图片加载失败，使用文字替代
+                logo_label.setText("🚢")
+                logo_label.setStyleSheet("font-size: 80px; color: #2c3e50;")
+        else:
+            # 如果图片不存在，使用文字替代
+            logo_label.setText("🚢")
+            logo_label.setStyleSheet("font-size: 80px; color: #2c3e50;")
+
+        main_layout.addWidget(logo_label, alignment=Qt.AlignCenter)
 
         # 标题
-        title_label = QLabel("船舶监控系统")
+        title_label = QLabel("指挥船舶系统")
         title_label.setAlignment(Qt.AlignCenter)
         title_font = QFont()
         title_font.setPointSize(24)
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #34495e; margin-bottom: 20px;")
+        title_label.setStyleSheet("color: #2c3e50; margin-bottom: 10px;")
         main_layout.addWidget(title_label)
 
-        # 表单区域
+        # ========== 表单区域 ==========
         form_frame = QFrame()
-        form_frame.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border-radius: 10px;
-                padding: 30px;
-            }
-            QLineEdit {
-                padding: 10px;
-                border: 1px solid #ced4da;
-                border-radius: 5px;
-                font-size: 14px;
-                min-height: 20px;
-            }
-            QLineEdit:focus {
-                border: 2px solid #3498db;
-            }
-            QCheckBox {
-                font-size: 14px;
-                spacing: 8px;
-            }
-            QPushButton {
-                padding: 12px;
-                border-radius: 5px;
-                font-size: 16px;
-                font-weight: bold;
-                min-height: 30px;
-            }
-            QPushButton#loginBtn {
-                background-color: #3498db;
-                color: white;
-                border: none;
-            }
-            QPushButton#loginBtn:hover {
-                background-color: #2980b9;
-            }
-            QPushButton#cancelBtn {
-                background-color: #e74c3c;
-                color: white;
-                border: none;
-            }
-            QPushButton#cancelBtn:hover {
-                background-color: #c0392b;
-            }
-        """)
-
         form_layout = QVBoxLayout(form_frame)
-        form_layout.setSpacing(15)
+        form_layout.setSpacing(10)
 
-        # 用户名
-        username_label = QLabel("用户名:")
+        # ===== 用户名 =====
+        username_label = QLabel("用户名")
         username_label.setFont(QFont("", 12))
+        username_label.setStyleSheet("color: #2c3e50; font-weight: bold;")
+        form_layout.addWidget(username_label)
+
         self.username_edit = QLineEdit()
         self.username_edit.setPlaceholderText("请输入用户名")
+        form_layout.addWidget(self.username_edit)
 
-        # 密码
-        password_label = QLabel("密码:")
+        # ===== 密码 =====
+        password_label = QLabel("密码")
         password_label.setFont(QFont("", 12))
+        password_label.setStyleSheet("color: #2c3e50; font-weight: bold;")
+        form_layout.addWidget(password_label)
+
+        # 密码输入框 + 显示按钮（水平布局）
+        password_layout = QHBoxLayout()
+        password_layout.setSpacing(0)
+
         self.password_edit = QLineEdit()
         self.password_edit.setPlaceholderText("请输入密码")
         self.password_edit.setEchoMode(QLineEdit.Password)
+        password_layout.addWidget(self.password_edit)
+
+        # 密码显示/隐藏按钮
+        self.show_pwd_btn = QPushButton("👁")
+        self.show_pwd_btn.setObjectName("showPwdBtn")
+        self.show_pwd_btn.setFixedWidth(40)
+        self.show_pwd_btn.setToolTip("显示/隐藏密码")
+        self.show_pwd_btn.clicked.connect(self.toggle_password_visibility)
+        password_layout.addWidget(self.show_pwd_btn)
+
+        form_layout.addLayout(password_layout)
+
+        # ===== 网络选择 =====
+        network_label = QLabel("网络选择")
+        network_label.setFont(QFont("", 12))
+        network_label.setStyleSheet("color: #2c3e50; font-weight: bold; margin-top: 8px;")
+        form_layout.addWidget(network_label)
+
+        network_layout = QHBoxLayout()
+        network_layout.setSpacing(20)
+
+        self.internal_radio = QRadioButton("内网")
+        self.internal_radio.setChecked(True)
+        self.internal_radio.toggled.connect(self.on_network_changed)
+        network_layout.addWidget(self.internal_radio)
+
+        self.external_radio = QRadioButton("外网")
+        self.external_radio.toggled.connect(self.on_network_changed)
+        network_layout.addWidget(self.external_radio)
+
+        network_layout.addStretch()
+        form_layout.addLayout(network_layout)
+
+        # IP地址显示
+        self.network_ip_label = QLabel()
+        self.network_ip_label.setStyleSheet("color: #7f8c8d; font-size: 11px; margin-top: -5px;")
+        self.update_network_ip_label()
+        form_layout.addWidget(self.network_ip_label)
 
         # 记住密码复选框
         self.remember_checkbox = QCheckBox("记住密码")
         self.remember_checkbox.setFont(QFont("", 12))
-
-        # 添加控件到表单布局
-        form_layout.addWidget(username_label)
-        form_layout.addWidget(self.username_edit)
-        form_layout.addWidget(password_label)
-        form_layout.addWidget(self.password_edit)
         form_layout.addWidget(self.remember_checkbox)
 
         main_layout.addWidget(form_frame)
 
-        # 按钮区域
+        # ========== 按钮区域 ==========
         button_layout = QHBoxLayout()
         button_layout.setSpacing(15)
 
@@ -169,11 +210,17 @@ class LoginDialog(QDialog):
         # 状态信息
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("color: #e74c3c; font-size: 12px;")
+        self.status_label.setStyleSheet("color: #e74c3c; font-size: 12px; min-height: 20px;")
         main_layout.addWidget(self.status_label)
 
         # 添加弹性空间
         main_layout.addStretch()
+
+        # 版本信息
+        version_label = QLabel("v1.0.0")
+        version_label.setAlignment(Qt.AlignCenter)
+        version_label.setStyleSheet("color: #bdc3c7; font-size: 11px;")
+        main_layout.addWidget(version_label)
 
         self.setLayout(main_layout)
 
@@ -182,6 +229,59 @@ class LoginDialog(QDialog):
         self.cancel_btn.clicked.connect(self.reject)
         self.username_edit.returnPressed.connect(self.handle_login)
         self.password_edit.returnPressed.connect(self.handle_login)
+
+    def toggle_password_visibility(self):
+        """切换密码显示/隐藏"""
+        self.password_visible = not self.password_visible
+        if self.password_visible:
+            self.password_edit.setEchoMode(QLineEdit.Normal)
+            self.show_pwd_btn.setText("🙈")
+            self.show_pwd_btn.setToolTip("隐藏密码")
+        else:
+            self.password_edit.setEchoMode(QLineEdit.Password)
+            self.show_pwd_btn.setText("👁")
+            self.show_pwd_btn.setToolTip("显示密码")
+
+    def _get_logo_path(self):
+        """获取Logo图片路径"""
+        # 尝试多个可能的路径
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "images", "logo.png"),
+            os.path.join(os.path.dirname(__file__), "logo.jpg"),
+            os.path.join("images", "logo.jpg"),
+            "logo.jpg"
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+
+    def on_network_changed(self):
+        """网络选择变化"""
+        self.update_network_ip_label()
+        # 更新APIService的IP地址
+        self.update_api_service_ip()
+
+    def update_network_ip_label(self):
+        """更新网络IP显示标签"""
+        if self.internal_radio.isChecked():
+            ip = self.network_config.get('internal', {}).get('ip', '')
+            self.selected_network = 'internal'
+            self.network_ip_label.setText(f"(内网IP: {ip})")
+        else:
+            ip = self.network_config.get('external', {}).get('ip', '')
+            self.selected_network = 'external'
+            self.network_ip_label.setText(f"(外网IP: {ip})")
+
+    def update_api_service_ip(self):
+        """更新APIService的IP地址"""
+        if self.internal_radio.isChecked():
+            ip = self.network_config.get('internal', {}).get('ip', '')
+        else:
+            ip = self.network_config.get('external', {}).get('ip', '')
+        # 更新APIService的IP
+        self.api_service.set_base_url(ip)
+        print(f"切换到: {ip}")
 
     def load_saved_credentials(self):
         """加载保存的账号密码"""
@@ -244,8 +344,16 @@ class LoginDialog(QDialog):
         """登录完成的回调"""
         if success:
             self.status_label.setText("登录成功")
+
+            # 获取网络类型
+            network_type = "内网" if self.internal_radio.isChecked() else "外网"
+
             # 发出登录成功信号
-            self.login_success.emit(self.api_service, self.username_edit.text().strip())
+            self.login_success.emit(self.api_service, self.username_edit.text().strip(),network_type)
+
+            # 关闭登录对话框
+            self.accept()
+
         else:
             error_msg = getattr(self.api_service, 'last_error', '用户名或密码错误')
             self.status_label.setText(error_msg)
@@ -253,6 +361,9 @@ class LoginDialog(QDialog):
             self.password_edit.setFocus()
             # 恢复登录按钮
             self.login_btn.setEnabled(True)
+            self.login_btn.setText("登录")
+            self.status_label.setText("")
+
 
     def on_login_error(self, error_msg):
         """登录错误的回调"""

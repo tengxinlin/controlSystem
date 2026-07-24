@@ -543,7 +543,10 @@ class APIService:
         """登录"""
         return self.api_manager.login('/api/User/Login',username,password)
 
-
+    def set_base_url(self, base_url):
+        """设置基础URL"""
+        self.api_manager.base_url = base_url
+        print(f"API基础URL已更新: {base_url}")
 
 # 定义具体想要用的接口
     def call_api(self, api_name: str, data: Dict[str, Any] = None,
