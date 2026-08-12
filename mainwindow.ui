@@ -40,6 +40,19 @@
          </widget>
         </item>
         <item>
+         <spacer name="horizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
          <widget class="QLabel" name="label_weather">
           <property name="font">
            <font>
@@ -51,21 +64,39 @@
           <property name="text">
            <string>TextLabel</string>
           </property>
+          <property name="textFormat">
+           <enum>Qt::AutoText</enum>
+          </property>
+          <property name="wordWrap">
+           <bool>false</bool>
+          </property>
          </widget>
         </item>
         <item>
-         <widget class="QLabel" name="label_water">
-          <property name="font">
-           <font>
-            <pointsize>20</pointsize>
-            <weight>75</weight>
-            <bold>true</bold>
-           </font>
+         <widget class="QDoubleSpinBox" name="water_spin">
+          <property name="suffix">
+           <string>米</string>
           </property>
-          <property name="text">
-           <string>TextLabel</string>
+          <property name="decimals">
+           <number>1</number>
+          </property>
+          <property name="singleStep">
+           <double>0.100000000000000</double>
           </property>
          </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer_2">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
         </item>
         <item>
          <widget class="QLabel" name="label_workperson">
@@ -80,6 +111,19 @@
            <string>TextLabel</string>
           </property>
          </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer_3">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
         </item>
         <item>
          <widget class="QLabel" name="label_signal">
@@ -138,17 +182,10 @@
          <layout class="QVBoxLayout" name="verticalLayout_lable">
           <item>
            <layout class="QGridLayout" name="gridLayout">
-            <item row="1" column="0">
-             <widget class="QLabel" name="label_4">
+            <item row="0" column="1">
+             <widget class="QPushButton" name="mqtt_btn">
               <property name="text">
-               <string>TextLabel</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="QLabel" name="label_5">
-              <property name="text">
-               <string>TextLabel</string>
+               <string>MQTT</string>
               </property>
              </widget>
             </item>
@@ -159,10 +196,17 @@
               </property>
              </widget>
             </item>
-            <item row="0" column="1">
-             <widget class="QPushButton" name="mqtt_btn">
+            <item row="1" column="1">
+             <widget class="QLabel" name="label_5">
               <property name="text">
-               <string>MQTT</string>
+               <string>TextLabel</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QPushButton" name="voice_btn">
+              <property name="text">
+               <string>语音设置</string>
               </property>
              </widget>
             </item>

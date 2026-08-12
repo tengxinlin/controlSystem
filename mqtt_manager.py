@@ -1,10 +1,11 @@
 # mqtt_manager.py
 import json
+import threading
 import time
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
 import paho.mqtt.client as mqtt
-from PyQt5.QtCore import QObject, pyqtSignal, QThread, pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, QThread, pyqtSlot, QTimer
 
 
 @dataclass
@@ -61,7 +62,14 @@ class MQTTManager(QObject):
         # 连接状态
         self.auto_reconnect = True
         self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 5
+        self.max_reconnect_attempts =5
+
+        # 添加状态标志
+        self._is_disconnecting=False
+        self._is_connecting = False
+        self._reconnecting = False
+        self._connect_timer = None
+
 
         # 存储待订阅的主题列表
         self.pending_subscriptions = []  # 存储 (topic, qos) 元组
@@ -73,7 +81,7 @@ class MQTTManager(QObject):
 
     def _init_client(self):
         """初始化MQTT客户端"""
-        client_id = self.config.client_id or f"pyqt_mqtt_{int(time.time())}"
+        client_id = f"pyqt_mqtt_{int(time.time())}"
 
         self.client = mqtt.Client(
             client_id=client_id,
@@ -107,16 +115,31 @@ class MQTTManager(QObject):
 
     def _on_connect(self, client, userdata, flags, rc):
         """连接回调"""
+        # 防止重复处理
+        if self._is_connecting :
+            self.signals.log_message.emit("⏳ 正在连接中，忽略重复回调")
+            return
+
+        self._is_connecting = False
+
         if rc == 0:
             self.is_connected = True
             self.reconnect_attempts = 0
-            self.signals.connected.emit()#mqtt连接成功的信号发射
+            self._reconnecting = False
+            self.signals.connected.emit()
             self.signals.log_message.emit("✅ MQTT连接成功")
 
             # 连接成功后，订阅所有待订阅的主题
             if self.pending_subscriptions:
-                self.signals.log_message.emit(f"正在重新订阅 {len(self.pending_subscriptions)} 个主题...")
+                # 去重处理
+                unique_topics = {}
                 for topic, qos in self.pending_subscriptions:
+                    unique_topics[topic] = qos
+
+                self.signals.log_message.emit(f"正在重新订阅 {len(unique_topics)} 个主题...")
+
+                for topic, qos in unique_topics.items():
+
                     result = self.client.subscribe(topic, qos)
                     if result[0] == mqtt.MQTT_ERR_SUCCESS:
                         self.subscribed_topics[topic] = qos
@@ -132,34 +155,62 @@ class MQTTManager(QObject):
             error_msg = f"连接失败，返回码: {rc}"
             self.signals.connection_failed.emit(error_msg)
             self.signals.log_message.emit(f"❌ {error_msg}")
+            self._is_connecting = False
 
 
             # 自动重连
-            if self.auto_reconnect and self.reconnect_attempts < self.max_reconnect_attempts:
+            if self.auto_reconnect and not self._reconnecting and self.reconnect_attempts < self.max_reconnect_attempts:
+                self._reconnecting = True
                 self.reconnect_attempts += 1
                 self.signals.log_message.emit(f"尝试重连 ({self.reconnect_attempts}/{self.max_reconnect_attempts})...")
-                time.sleep(2 ** self.reconnect_attempts)  # 指数退避
-                self.connect()
+                # time.sleep(2 ** self.reconnect_attempts)  # 指数退避
+                # self.connect()
+                QTimer.singleShot(1000, self._do_connect)
 
     def _on_disconnect(self, client, userdata, rc):
         """断开连接回调"""
-        self.is_connected = False
-        self.signals.disconnected.emit()
         # 保存当前已订阅的主题到待订阅列表（用于重连后重新订阅）
         if self.subscribed_topics:
+            # 去重保存
             self.pending_subscriptions = [(topic, qos) for topic, qos in self.subscribed_topics.items()]
             self.signals.log_message.emit(f"已保存 {len(self.pending_subscriptions)} 个主题待重新订阅")
+            
+        # 如果是主动断开，不触发重连
+        if self._is_disconnecting:
+            self.is_connected = False
+            self.signals.disconnected.emit()
+            self.signals.log_message.emit("✅ 已断开MQTT连接")
+            self._is_disconnecting = False
+            return
+
+        self.is_connected = False
+        self.signals.disconnected.emit()
+
+
 
         if rc != 0:
             self.signals.log_message.emit(f"意外断开连接，返回码: {rc}")
-            # 自动重连
-            if self.auto_reconnect and self.reconnect_attempts < self.max_reconnect_attempts:
+            # 设置防重入标志
+            self._reconnecting = True
+
+            # 自动重连（避免重复触发）
+            if self.auto_reconnect and not self.reconnecting and self.reconnect_attempts < self.max_reconnect_attempts:
+                self._reconnecting = True
                 self.reconnect_attempts += 1
                 self.signals.log_message.emit(f"尝试重连 ({self.reconnect_attempts}/{self.max_reconnect_attempts})...")
-                time.sleep(2 ** self.reconnect_attempts)
-                self.connect()
+                # time.sleep(0.2 * self.reconnect_attempts)
+                # self.connect()
+                QTimer.singleShot(2000, self._do_connect)
         else:
             self.signals.log_message.emit("✅ 已断开MQTT连接")
+
+
+    def _do_connect(self):
+        """执行重连"""
+        # self._reconnecting = False
+        # self._is_connecting = False
+        self.connect()
+
 
     def _on_message(self, client, userdata, msg):
         """消息接收回调"""
@@ -207,7 +258,13 @@ class MQTTManager(QObject):
 
     def connect(self):
         """连接到MQTT代理"""
+        # 防止重复连接
+        if self._is_connecting:
+            self.signals.log_message.emit("⏳ 正在连接中，请稍后...")
+            return
+
         try:
+            self._is_connecting = True
             self.signals.log_message.emit(f"正在连接MQTT服务器 {self.config.broker_ip}:{self.config.port}...")
 
             if self.config.tls_enabled:
@@ -229,33 +286,54 @@ class MQTTManager(QObject):
             # 启动网络循环（在后台线程中）
             self.client.loop_start()
 
+            self._is_connecting=False
+
         except Exception as e:
             error_msg = f"连接失败: {e}"
             self.signals.connection_failed.emit(error_msg)
             self.signals.log_message.emit(f"❌ {error_msg}")
+            self._is_connecting = False
+
+            # 重试连接
+            if self.auto_reconnect and not self._reconnecting and self.reconnect_attempts < self.max_reconnect_attempts:
+                self._reconnecting = True
+                self.reconnect_attempts += 1
+                delay = min(30, 2 ** self.reconnect_attempts)
+                self.signals.log_message.emit(f"将在 {delay} 秒后重试...")
+                QTimer.singleShot(delay * 1000, self._do_connect)
 
     def disconnect(self):
         """断开连接"""
         if self.client and self.is_connected:
+            self._is_disconnecting = True
             self.client.loop_stop()
             self.client.disconnect()
             self.is_connected = False
             self.signals.disconnected.emit()
             self.signals.log_message.emit("已断开MQTT连接")
+            self._is_disconnecting = False
+            self._is_connecting=False
 
 
     def reconnect(self):
         """重新连接"""
         self.signals.log_message.emit("尝试重新连接...")
+        self._reconnecting = True
 
         # 保存当前已订阅的主题
         if self.subscribed_topics:
             self.pending_subscriptions = [(topic, qos) for topic, qos in self.subscribed_topics.items()]
             self.signals.log_message.emit(f"已保存 {len(self.pending_subscriptions)} 个主题待重新订阅")
 
-        self.disconnect()
-        time.sleep(1)
-        self.connect()
+        # 断开连接
+        if self.is_connected:
+            self._is_disconnecting = True
+            self.client.loop_stop()
+            self.client.disconnect()
+            self.is_connected = False
+            self._is_disconnecting = False
+
+        QTimer.singleShot(1000, self._do_connect)
 
     def publish(self, topic: str, payload: Any, qos: int = 0, retain: bool = False):
         """

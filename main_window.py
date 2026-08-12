@@ -50,9 +50,11 @@ from mainwindow import Ui_MainWindow  # 导入转换后的UI类
 from FoliumMapWidget import FoliumMapWidget
 from config import ConfigManager  # 假设 config_manager.py 在同一目录
 from mqtt_ui import MQTTControlWidget
+from voice_manager import VoiceManager
+from voice_settings_dialog import VoiceSettingsDialog
 
 class MainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self,api_service,username,network_type):
+    def __init__(self,api_service,username,network_type=None):
         """
                主窗口构造函数
                :param api_service: 已登录的APIService实例
@@ -148,7 +150,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.db_manager = SQLiteTableManager("test.db")
         self.db_manager.connect()
 
+
         self.current_reach = None  # 当前选中的控制河段
+
+
 
         # 创建里程区域管理器
         self.mileage_manager = MileageRegionManager()
@@ -194,6 +199,58 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 显示启动日志
         self.log_message(f"系统启动，欢迎用户: {username}")
 
+        self.water_spin.valueChanged.connect(self.on_water_changed)
+
+        # 从配置文件加载水位
+        water_level = self.config_mgr.get('waterLevel', default=3.0)
+        self.water_spin.setValue(water_level)
+        # ========== 天气设置 ==========
+        # 从配置文件读取天气列表
+        self.weather_list = self.config_mgr.get('weather_list',
+                                                default=["晴", "阴", "雨", "霾", "雾", "多云", "雪", "大风"])
+        self.weather_icons = self.config_mgr.get('weather_icons', default={
+            "晴": "☀️",
+            "阴": "☁️",
+            "雨": "🌧️",
+            "霾": "🌫️",
+            "雾": "🌫️",
+            "多云": "⛅",
+            "雪": "❄️",
+            "大风": "💨"
+        })
+
+        self.weather_label = self.label_weather
+
+        # 设置样式（可点击）
+        self.weather_label.setStyleSheet("""
+                        QLabel {
+                            font-size: 16px;
+                            font-weight: bold;
+                            color: #2c3e50;
+                            background-color: #ecf0f1;
+                            padding: 5px 15px;
+                            border-radius: 4px;
+                            border: 1px solid #bdc3c7;
+                        }
+                        QLabel:hover {
+                            background-color: #d5dbdb;
+                            cursor: pointer;
+                        }
+                    """)
+        # 也可以设置字体对象
+        font = self.water_spin.font()
+        font.setFamily("Microsoft YaHei")
+        font.setPointSize(14)
+        font.setBold(True)
+        self.water_spin.setFont(font)
+
+        # 加载保存的天气
+        weather = self.config_mgr.get('weather', default='晴')
+        self.set_current_weather(weather)
+
+        # 点击事件
+        self.weather_label.mousePressEvent = self.on_weather_clicked
+
         # 控制河段选择COMBOX信号连接
         self.comboBox.currentTextChanged.connect(self.on_reach_selected)
         self.load_reach_data(self.controlRivername)
@@ -229,9 +286,202 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pending_signal_type = None
         self.signal_dialog = None  # 保存对话框引用
 
+        # 初始化语音管理器
+        self.voice_manager = VoiceManager()
+        self.voice_btn.clicked.connect(self.show_voice_settings)
+
+        # 连接语音信号
+        self.voice_manager.speak_started.connect(self.on_voice_started)
+        self.voice_manager.speak_finished.connect(self.on_voice_finished)
+        self.voice_manager.speak_error.connect(self.on_voice_error)
+
+        # 初始化信号控制按钮
+        self.init_signal_buttons()
+
+    def on_water_changed(self, value):
+        """水位变化时保存到配置文件"""
+        self.config_mgr.set('waterLevel', value=value)
+        self.config_mgr.save_config()
+        self.log_message(f"水位已设置为: {value:.1f} 米")
+
+    def set_current_weather(self, weather_text):
+        """设置当前天气"""
+        if weather_text not in self.weather_list:
+            weather_text = self.weather_list[0] if self.weather_list else "晴"
+
+        # 获取当前天气索引
+        self.current_weather_index = self.weather_list.index(weather_text)
+
+        # 获取天气图标
+        icon = self.weather_icons.get(weather_text, "☁️")
+
+        # 更新显示
+        self.weather_label.setText(f"{icon} {weather_text}")
+
+        # 保存到配置文件
+        self.config_mgr.set('weather', value=weather_text)
+        self.config_mgr.save_config()
+
+    def on_weather_clicked(self, event):
+        """点击天气标签切换到下一个天气"""
+        if not self.weather_list:
+            return
+
+        # 切换到下一个天气
+        self.current_weather_index = (self.current_weather_index + 1) % len(self.weather_list)
+        weather = self.weather_list[self.current_weather_index]
+
+        # 更新显示
+        self.set_current_weather(weather)
+
+        # 记录日志
+        self.log_message(f"天气已切换为: {weather}")
+
+    def init_signal_buttons(self):
+        """初始化信号控制按钮"""
+        # 定义按钮和对应的信号类型
+        self.signal_buttons = {
+            '上水': self.pushButton_signalUP,  # 上水按钮
+            '下水': self.pushButton_signalDown,  # 下水按钮
+            '半杆': self.pushButton_signalHalf,  # 半杆按钮
+            '关闭': self.pushButton_signalClose,  # 关闭按钮
+            '禁航': self.pushButton_signalNo  # 禁航按钮
+        }
+
+
+        # 为每个按钮绑定点击事件
+        for signal_type, btn in self.signal_buttons.items():
+            # # 先断开之前的连接
+            # try:
+            #     btn.clicked.disconnect()
+            # except TypeError:
+            #     pass
+            btn.clicked.connect(lambda checked, st=signal_type: self.on_signal_button_clicked(st))
+
+            # 设置按钮样式（初始状态）
+            btn.setStyleSheet(self.get_button_style(False))
+            btn.setCursor(Qt.PointingHandCursor)
+
+        # 默认选中关闭状态
+        self.set_active_signal('关闭')
+
+    def get_button_style(self, is_active: bool) -> str:
+        """
+        获取按钮样式
+
+        Args:
+            is_active: 是否激活状态
+        """
+        if is_active:
+            return """
+                QPushButton {
+                    background-color: #27ae60;
+                    color: white;
+                    border: 2px solid #1e8449;
+                    border-radius: 5px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: #2ecc71;
+                }
+            """
+        else:
+            return """
+                QPushButton {
+                    background-color: #ecf0f1;
+                    color: #2c3e50;
+                    border: 2px solid #bdc3c7;
+                    border-radius: 5px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: #d5dbdb;
+                    border-color: #95a5a6;
+                }
+            """
+
+    def set_active_signal(self, active_signal_type: str):
+        """
+        设置当前激活的信号按钮
+
+        Args:
+            active_signal_type: 激活的信号类型 ('上水', '下水', '半杆', '关闭', '禁航')
+        """
+        for signal_type, btn in self.signal_buttons.items():
+            is_active = (signal_type == active_signal_type)
+            btn.setStyleSheet(self.get_button_style(is_active))
+
+        # 记录当前激活的信号
+        self.current_signal = active_signal_type
+
+    def on_signal_button_clicked(self, signal_type: str):
+        """
+        信号按钮点击处理
+
+        Args:
+            signal_type: 信号类型 ('上水', '下水', '半杆', '关闭', '禁航')
+        """
+
+        # 防止重复点击
+        if self.is_processing_signal:
+            print(f"正在处理信号，忽略重复点击: {signal_type}")
+            return
+
+        # 设置处理标志
+        self.is_processing_signal = True
+
+        try:
+
+            # 1. 更新按钮状态（变绿）
+            self.set_active_signal(signal_type)
 
 
 
+            # 3. 发送控制信号
+            self.send_mqtt_signal(signal_type,"")
+
+        # 4. 记录日志
+
+        finally:
+            # 重置处理标志
+            self.is_processing_signal = False
+
+    def show_voice_settings(self):
+        """显示语音设置界面"""
+        dialog = VoiceSettingsDialog(
+            self.voice_manager,
+            self.db_manager,
+            self.reachCode,  # 当前控制河段代码
+            self
+        )
+        dialog.config_changed.connect(self.on_voice_config_changed)
+        dialog.show()
+
+    def on_voice_config_changed(self, config):
+        """语音配置变化回调"""
+        self.log_message(f"语音配置已更新: {config}")
+
+    def on_voice_started(self, text, source):
+        """语音播报开始"""
+        self.log_message(f"语音播报开始 [{source}]: {text}")
+
+    def on_voice_finished(self, text, source):
+        """语音播报完成"""
+        self.log_message(f"语音播报完成 [{source}]")
+
+    def on_voice_error(self, text, source):
+        """语音播报错误"""
+        self.log_message(f"语音播报错误 [{source}]: {text}")
+
+    # 在需要语音播报的地方调用
+    def speak_message(self, message: str, priority: int = 0):
+        """播报消息"""
+        if hasattr(self, 'voice_manager'):
+            self.voice_manager.speak(message, priority)
 
     def get_current_signal(self) -> str:
         """
@@ -431,6 +681,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             self.log_message(f"发送 {signal_type} 信号")
 
+        self.label_current_signal.setText(signal_type)
+        self.label_signal.setText(f"当前信号：{signal_type}")
+
         return mqtt_success_count + lora_success_count
 
     def _update_ship_signal_revealed(self, ship_name: str, signal_type: str):
@@ -614,6 +867,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 立即更新一次
         self.update_time_display()
 
+    def clear_log(self):
+        """清空日志"""
+        self.plainTextEdit.clear()
+        self.current_log_lines = 0
+        print("日志已清空")
+
     # 日志控件
     def setup_log_widget(self):
         """设置日志控件"""
@@ -636,7 +895,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """)
 
         # 日志最大行数限制
-        self.max_log_lines = 1000
+        self.max_log_lines = 10000
         self.current_log_lines = 0
 
     def log_message(self, message: str):
@@ -665,6 +924,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             cursor.removeSelectedText()
             cursor.deleteChar()  # 删除换行符
             self.current_log_lines -= 1
+
 
         # 在开头插入新消息
         cursor = self.plainTextEdit.textCursor()
@@ -1120,6 +1380,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 cleared_count = self.queue_manager.clear_all_queues()
                 print(f"已清空队列，共 {cleared_count} 艘船舶")
 
+            #原先MQTT控件取消连接
+            self.mqtt_widget.disconnect_mqtt()
+
             # 创建新的MQTT控件
             self.mqtt_widget = MQTTControlWidget(api_service)
             # 设置窗口关闭事件（重写closeEvent，让关闭变成隐藏）
@@ -1171,6 +1434,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.start_queue_processor()
             self.current_signal = '关闭'  # 控制河段的信号
+            self.label_current_signal.setText("关闭")
 
             js = f"setMapView({reach.center_point.lat}, {reach.center_point.lon}, {14});"
             self.webView.page().runJavaScript(js)
@@ -1183,6 +1447,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             js_code=f"""drawReach({data_json})"""
             self.webView.page().runJavaScript(js_code)
             print(f"河段 {reach.reach_name} 绘制完成")
+
+            # 初始化语音管理器
+            self.voice_manager = VoiceManager()
+            self.voice_btn.clicked.connect(self.show_voice_settings)
+
+            # 连接语音信号
+            self.voice_manager.speak_started.connect(self.on_voice_started)
+            self.voice_manager.speak_finished.connect(self.on_voice_finished)
+            self.voice_manager.speak_error.connect(self.on_voice_error)
+
+
+            # 添加防重复标志
+            self.is_processing_signal = False
+
+            self.clear_log()
+
 
             print(f"成功加载河段: {reach_name}")
 
@@ -1852,32 +2132,32 @@ if __name__ == "__main__":
     app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     # 在程序入口（创建 QApplication 后）添加：
     os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
-    # 创建登录对话框（不创建主窗口）
-    login_dialog = LoginDialog()
-    # 定义登录成功后的回调函数
-    def on_login_success(api_service, username,network_type):
-        """登录成功后创建并显示主窗口"""
+    # # 创建登录对话框（不创建主窗口）
+    # login_dialog = LoginDialog()
+    # # 定义登录成功后的回调函数
+    # def on_login_success(api_service, username,network_type):
+    #     """登录成功后创建并显示主窗口"""
+    #
+    #     main_window = MainWindow(api_service, username,network_type)
+    #     main_window.show()
+    #     login_dialog.close()
+    #
+    #     # 连接登录成功信号
+    #
+    # # 先信号与槽连接，在展示对话框
+    # login_dialog.login_success.connect(on_login_success)
+    #
+    # # 显示登录对话框
+    # login_dialog.show()
 
-        main_window = MainWindow(api_service, username,network_type)
-        main_window.show()
-        login_dialog.close()
-
-        # 连接登录成功信号
-
-    # 先信号与槽连接，在展示对话框
-    login_dialog.login_success.connect(on_login_success)
-
-    # 显示登录对话框
-    login_dialog.show()
-
-    # api_service = APIService("http://isc.cqu.edu.cn:23456")
-    # api_service.login("梁山","Cqhdj@2024")
-    # main_window = MainWindow(api_service, "username")
-    # main_window.show()
+    api_service = APIService("http://isc.cqu.edu.cn:23456")
+    api_service.login("梁山","Cqhdj@2024")
+    main_window = MainWindow(api_service, "username")
+    main_window.show()
 
 
 
     # 进入事件循环
     sys.exit(app.exec_())
-   
+
 
