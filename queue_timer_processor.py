@@ -64,9 +64,9 @@ class QueueTimerProcessor(QObject):
 
     def process_all_queues(self):
         """处理所有队列（定时器回调）"""
-        print(f"\n{'=' * 50}")
-        print(f"开始处理队列 - {datetime.now().strftime('%H:%M:%S')}")
-        print(f"{'=' * 50}")
+        # print(f"\n{'=' * 50}")
+        # print(f"开始处理队列 - {datetime.now().strftime('%H:%M:%S')}")
+        # print(f"{'=' * 50}")
 
         try:
             # 1. 处理待指挥队列
@@ -83,7 +83,7 @@ class QueueTimerProcessor(QObject):
             import traceback
             traceback.print_exc()
 
-        print(f"队列处理完成\n")
+        # print(f"队列处理完成\n")
 
     def _is_ship_blocked(self, mmsi: str) -> bool:
         """检查船舶是否被阻止弹窗（2分钟内）"""
@@ -102,14 +102,14 @@ class QueueTimerProcessor(QObject):
 
     def _process_pending_queue(self):
         """处理待指挥队列 - 排序并判断揭示信号"""
-        print("\n--- 处理待指挥队列 ---")
+        # print("\n--- 处理待指挥队列 ---")
         # 如果正在显示对话框，跳过本次处理
         if self.is_dialog_showing:
             print(f"对话框正在显示中（船舶: {self.pending_dialog_ship}），跳过本次队列处理")
             return
 
         ships = self.queue_manager.get_pending_list()
-        print(f"待指挥队列长度: {len(ships)}")
+        # print(f"待指挥队列长度: {len(ships)}")
 
 
         if not ships:
@@ -163,7 +163,7 @@ class QueueTimerProcessor(QObject):
 
         # 6. 更新待指挥队列表格
         self.pending_updated.emit(sorted_ships)
-        print(f"待指挥队列处理完成，已排序 {len(sorted_ships)} 艘")
+        # print(f"待指挥队列处理完成，已排序 {len(sorted_ships)} 艘")
 
     def _determine_signal_to_reveal(self, first_ship: dict,
                                     commanded_ships: List[dict],
@@ -228,10 +228,10 @@ class QueueTimerProcessor(QObject):
 
     def _process_commanded_queue(self):
         """处理已指挥队列"""
-        print("\n--- 处理已指挥队列 ---")
+        # print("\n--- 处理已指挥队列 ---")
 
         ships = self.queue_manager.get_commanded_list()
-        print(f"已指挥队列长度: {len(ships)}")
+        # print(f"已指挥队列长度: {len(ships)}")
 
         if not ships:
             self.commanded_updated.emit([])
@@ -271,14 +271,14 @@ class QueueTimerProcessor(QObject):
 
         sorted_ships = sorted(processed_ships, key=lambda x: x.get('elapsed_minutes', 0))
         self.commanded_updated.emit(sorted_ships)
-        print(f"已指挥队列处理完成: {len(sorted_ships)}艘")
+        # print(f"已指挥队列处理完成: {len(sorted_ships)}艘")
 
     def _process_control_area_queue(self):
         """处理控制河段内队列"""
-        print("\n--- 处理控制河段队列 ---")
+        # print("\n--- 处理控制河段队列 ---")
 
         ships = self.queue_manager.get_control_area_list()
-        print(f"控制河段队列长度: {len(ships)}")
+        # print(f"控制河段队列长度: {len(ships)}")
 
         if not ships:
             self.control_area_updated.emit([])
@@ -303,7 +303,7 @@ class QueueTimerProcessor(QObject):
 
         sorted_ships = sorted(processed_ships, key=lambda x: x.get('enter_control_time', 0))
         self.control_area_updated.emit(sorted_ships)
-        print(f"控制河段队列处理完成: {len(sorted_ships)}艘")
+        # print(f"控制河段队列处理完成: {len(sorted_ships)}艘")
 
     def on_dialog_closed(self):
         """

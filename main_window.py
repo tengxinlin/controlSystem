@@ -22,6 +22,7 @@ from passage_record_edit_dialog import PassageRecordEditDialog
 from passage_record_manager import PassageRecordManager
 from queue_manager import QueueManager
 from queue_timer_processor import QueueTimerProcessor
+from shift_dialog import ShiftDialog
 from ship_manager import ShipInfo
 from signal_confirm_dialog import SignalConfirmDialog
 from sqlite3Manager import SQLiteTableManager
@@ -68,6 +69,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)  # 加载 UI 界面
         self.username = username
         self.network_type = network_type
+        self.api_service = api_service
 
         # 获取屏幕尺寸
         screen = QApplication.primaryScreen()
@@ -138,6 +140,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.webView.settings().setAttribute(self.webView.settings().WebAttribute.JavascriptEnabled, True)
         self.webView.settings().setAttribute(self.webView.settings().WebAttribute.JavascriptCanOpenWindows, True)
 
+        # 当页面加载完成后，设置地图
+        self.webView.loadFinished.connect(self.on_load_finished)
+
         # 初始化配置管理器
         self.config_mgr = ConfigManager(app_name="MyMapApp")
 
@@ -191,7 +196,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #api接口
         self.api = api_service
 
-        self.initLocalDB()
+        # 初始化更新数据库
+        # self.initLocalDB()
 
         #控制河段信息读取
         # 设置日志控件
@@ -297,6 +303,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 初始化信号控制按钮
         self.init_signal_buttons()
+
+        self.shift_btn.clicked.connect(self.show_shift_dialog)
+
+        # 是否值班
+        self.isDuty=False
+
+    def show_shift_dialog(self):
+        """显示值班交接班对话框"""
+        # 获取当前控制河段的 reach_id
+        reach_id = self.current_reach.reach_id
+
+        if not reach_id:
+            QMessageBox.warning(self, "提示", "请先选择控制河段")
+            return
+
+        dialog = ShiftDialog(
+            self.api_service,
+            self.config_mgr,
+            reach_id,
+            self
+        )
+        dialog.shift_success.connect(self.on_shift_success)
+        dialog.show()
+
+
+
+    def on_shift_success(self,isduty:bool ,new_session_id: str):
+        """交接班成功回调"""
+        self.log_message(f"交接班成功，新 SessionID: {new_session_id}")
+        self.isDuty = isduty
+        # 更新 APIService 的 session_id
+        self.api_service.session_id = new_session_id
 
     def on_water_changed(self, value):
         """水位变化时保存到配置文件"""
@@ -499,6 +537,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def start_queue_processor(self):
         """启动队列定时器处理器"""
+        # 先停止原先的
+        if self.queue_processor:
+            self.queue_processor.stop()
         print("正在启动队列定时器处理器...")
 
         self.queue_processor = QueueTimerProcessor(
@@ -1043,8 +1084,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
 
-        # 当页面加载完成后，设置地图
-        self.webView.loadFinished.connect(self.on_load_finished)
+
 
     def inject_webchannel_js(self):
         """注入 WebChannel 初始化 JavaScript"""
@@ -1099,92 +1139,114 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """初始化数据库数据"""
         try:
             pass
-            # #初始化mqtt账号密码
-            # users = self.api.getMqttAdr()
-            # if users:
-            #    self.db_manager.update_by_single_condition('Internet',users[0],'netChoice','内网')
-            #    self.db_manager.update_by_single_condition('Internet', users[1], 'netChoice', '外网')
-            # network=self.config_mgr.get('InternetType')
-            # #初始化河段信息
-            # reaches=self.api.getAllReaches()
-            # raechCodeList=[]
-            # if reaches and reaches[0]:
-            #     self.db_manager.delete_all("Reaches")
-            #     for reach in reaches:
-            #         raechCodeList.append(reach['ReachCode'])
-            #         self.db_manager.insert_record("Reaches", reach)
 
-            ##初始化围栏信息
-            # FenceInfoAll = self.api.getFencesAll()
-            # print(FenceInfoAll)
-            # if FenceInfoAll and FenceInfoAll[0]:
-            #     self.db_manager.delete_all("Fence")
-            #     for FenceInfo in FenceInfoAll:
-            #         dict= {'ReachCode': FenceInfo['ReachCode'], "ReachName": FenceInfo['ReachName']}
-            #         if FenceInfo['TBQ']:
-            #             for tbq in FenceInfo["TBQ"]:
-            #                 dict["FenceType"]='停泊区'
-            #                 for key, value in tbq.items():
-            #                     dict["FenceName"] = key
-            #                     dict['PointList'] = value
-            #                 self.db_manager.insert_record("Fence", dict)
-            #         if FenceInfo['TSQ']:
-            #             for tbq in FenceInfo["TSQ"]:
-            #                 dict["FenceType"]='特殊区'
-            #                 for key, value in tbq.items():
-            #                     dict["FenceName"]=key
-            #                     dict['PointList']=value
-            #                 self.db_manager.insert_record("Fence", dict)
-            #         if FenceInfo['DDQ']:
-            #             for tbq in FenceInfo["DDQ"]:
-            #                 dict["FenceType"] = '等待区'
-            #                 for key, value in tbq.items():
-            #                     dict["FenceName"] = key
-            #                     dict['PointList'] = value
-            #                 self.db_manager.insert_record("Fence", dict)
-
-            # ##初始化LED信息
-            # for reachCode in raechCodeList:
-            #     ledInfoAll=self.api.getLedInfoAll(reachCode)
-            #     if ledInfoAll and ledInfoAll[0]:
-            #         self.db_manager.delete_by_conditions('LedInfo',{"reachCode":reachCode})
-            #         for ledInfo in ledInfoAll:
-            #             dict={}
-            #             dict['reachCode'] = reachCode
-            #             dict['ledID'] = ledInfo['ledID']
-            #             dict['ledName'] = ledInfo['ledName']
-            #             dict['LEDPublish']=ledInfo['LEDPublish']
-            #             dict['LEDReceive']=ledInfo['LEDReceive']
-            #             self.db_manager.insert_record("LedInfo", dict)
+            #初始化航道里程线
+            # miles=self.api.get_miles(557,1043)
+            # if miles:
+            #     self.db_manager.delete_all("ChannelMileageLine")  #删除所有里程线
+            #     for item in miles:
+            #         km = item['KM']
+            #         # 2. 拆分 pointA：原始是 "经度,纬度"
+            #         lon_a, lat_a = item['pointA'].split(',')
+            #
+            #         # 3. 拆分 pointB
+            #         lon_b, lat_b = item['pointB'].split(',')
+            #         # 4. 拼接成新字典
+            #         # 拼接 points：先纬度后经度，两个点依次排列
+            #         points = f"{lat_a},{lon_a},{lat_b},{lon_b}"
+            #         record = {
+            #             'KM': int(km),  # 确保是整数
+            #             'Points': points,
+            #         }
+            #         self.db_manager.insert_record("ChannelMileageLine", record)
 
 
-            # #初始化LORA信息
-            # for reachCode in raechCodeList:
-            #     loraInfoAll=self.api.getLoraInforList(reachCode)
-            #     if loraInfoAll and loraInfoAll[0]:
-            #         self.db_manager.delete_by_conditions('LoraInfo', {"reachCode": reachCode})
-            #         for loraInfo in loraInfoAll:
-            #             dict = {}
-            #             dict['reachCode'] = reachCode
-            #             dict['LoRaID'] = loraInfo['LoRaID']
-            #             dict['LoRaPlace'] = loraInfo['LoRaPlace']
-            #             dict['LoRaPublish'] = loraInfo['LoRaPublish']
-            #             dict['LoRaReceive'] = loraInfo['LoRaReceive']
-            #             dict['InternetType'] = self.config_mgr.get('InternetType')
-            #             self.db_manager.insert_record("LoraInfo", dict)
+            #初始化mqtt账号密码
+            users = self.api.getMqttAdr()
+            if users:
+               self.db_manager.update_by_single_condition('Internet',users[0],'netChoice','内网')
+               self.db_manager.update_by_single_condition('Internet', users[1], 'netChoice', '外网')
+            network=self.config_mgr.get('InternetType')
+            #初始化河段信息
+            reaches=self.api.getAllReaches()
+            raechCodeList=[]
+            if reaches and reaches[0]:
+                self.db_manager.delete_all("Reaches")
+                for reach in reaches:
+                    raechCodeList.append(reach['ReachCode'])
+                    self.db_manager.insert_record("Reaches", reach)
 
-            # #初始化主题信息
-            # for reachCode in raechCodeList:
-            #     topicInfoAll = self.api.getReachTopics(reachCode)
-            #     if topicInfoAll and topicInfoAll[0]:
-            #         self.db_manager.delete_by_conditions('topic', {"reachCode": reachCode,"network":network})
-            #         for topicInfo in topicInfoAll:
-            #             dict = {}
-            #             dict['reachCode'] = reachCode
-            #             dict['type'] = topicInfo['type']
-            #             dict['topic'] = topicInfo['topic']
-            #             dict['network'] = network
-            #             self.db_manager.insert_record("topic", dict)
+            #初始化围栏信息
+            FenceInfoAll = self.api.getFencesAll()
+            print(FenceInfoAll)
+            if FenceInfoAll and FenceInfoAll[0]:
+                self.db_manager.delete_all("Fence")
+                for FenceInfo in FenceInfoAll:
+                    dict= {'ReachCode': FenceInfo['ReachCode'], "ReachName": FenceInfo['ReachName']}
+                    if FenceInfo['TBQ']:
+                        for tbq in FenceInfo["TBQ"]:
+                            dict["FenceType"]='停泊区'
+                            for key, value in tbq.items():
+                                dict["FenceName"] = key
+                                dict['PointList'] = value
+                            self.db_manager.insert_record("Fence", dict)
+                    if FenceInfo['TSQ']:
+                        for tbq in FenceInfo["TSQ"]:
+                            dict["FenceType"]='特殊区'
+                            for key, value in tbq.items():
+                                dict["FenceName"]=key
+                                dict['PointList']=value
+                            self.db_manager.insert_record("Fence", dict)
+                    if FenceInfo['DDQ']:
+                        for tbq in FenceInfo["DDQ"]:
+                            dict["FenceType"] = '等待区'
+                            for key, value in tbq.items():
+                                dict["FenceName"] = key
+                                dict['PointList'] = value
+                            self.db_manager.insert_record("Fence", dict)
+
+            ##初始化LED信息
+            for reachCode in raechCodeList:
+                ledInfoAll=self.api.getLedInfoAll(reachCode)
+                if ledInfoAll and ledInfoAll[0]:
+                    self.db_manager.delete_by_conditions('LedInfo',{"reachCode":reachCode})
+                    for ledInfo in ledInfoAll:
+                        dict={}
+                        dict['reachCode'] = reachCode
+                        dict['ledID'] = ledInfo['ledID']
+                        dict['ledName'] = ledInfo['ledName']
+                        dict['LEDPublish']=ledInfo['LEDPublish']
+                        dict['LEDReceive']=ledInfo['LEDReceive']
+                        self.db_manager.insert_record("LedInfo", dict)
+
+
+            #初始化LORA信息
+            for reachCode in raechCodeList:
+                loraInfoAll=self.api.getLoraInforList(reachCode)
+                if loraInfoAll and loraInfoAll[0]:
+                    self.db_manager.delete_by_conditions('LoraInfo', {"reachCode": reachCode})
+                    for loraInfo in loraInfoAll:
+                        dict = {}
+                        dict['reachCode'] = reachCode
+                        dict['LoRaID'] = loraInfo['LoRaID']
+                        dict['LoRaPlace'] = loraInfo['LoRaPlace']
+                        dict['LoRaPublish'] = loraInfo['LoRaPublish']
+                        dict['LoRaReceive'] = loraInfo['LoRaReceive']
+                        dict['InternetType'] = self.config_mgr.get('InternetType')
+                        self.db_manager.insert_record("LoraInfo", dict)
+
+            #初始化主题信息
+            for reachCode in raechCodeList:
+                topicInfoAll = self.api.getReachTopics(reachCode)
+                if topicInfoAll and topicInfoAll[0]:
+                    self.db_manager.delete_by_conditions('topic', {"reachCode": reachCode,"network":network})
+                    for topicInfo in topicInfoAll:
+                        dict = {}
+                        dict['reachCode'] = reachCode
+                        dict['type'] = topicInfo['type']
+                        dict['topic'] = topicInfo['topic']
+                        dict['network'] = network
+                        self.db_manager.insert_record("topic", dict)
 
         except Exception as e:
             print(f"执行错误: {e}")
@@ -1294,7 +1356,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             # 查询Reaches表
             query = """
-                    SELECT ReachName,\
+                    SELECT ReachId,\
+                           ReachName,\
                         ReachCode,\
                             CenterP,\
                            UpBordLine, \
@@ -1330,7 +1393,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             reach = ControlReach(
                 reach_name=row['ReachName'],
                 reach_code=row['ReachCode'],
-                center_point=center_point
+                center_point=center_point,
+                reach_id=row["ReachId"]
             )
 
             # 加载上下界限标
@@ -1450,8 +1514,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # 初始化语音管理器
             self.voice_manager = VoiceManager()
-            self.voice_btn.clicked.connect(self.show_voice_settings)
-
             # 连接语音信号
             self.voice_manager.speak_started.connect(self.on_voice_started)
             self.voice_manager.speak_finished.connect(self.on_voice_finished)
@@ -1816,7 +1878,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for row in range(len(ships)):
             self.tableWidget_pending.setRowHeight(row, 30)
 
-        print(f"待指挥队列表格已更新: {len(ships)} 艘")
+
 
     def update_commanded_table(self, ships):
         """更新已指挥队列表格"""
@@ -1890,7 +1952,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for row in range(len(ships)):
             self.tableWidget_command.setRowHeight(row, 35)
 
-        print(f"已指挥队列表格已更新: {len(ships)} 艘")
+
 
     def update_control_area_table(self, ships):
         """更新控制河段队列表格"""
@@ -1970,7 +2032,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for row in range(len(ships)):
             self.tableWidget_control.setRowHeight(row, 35)
 
-        print(f"控制河段队列表格已更新: {len(ships)} 艘")
+
 
     def on_ais_ships_updated(self, ships):
         """AIS船舶数据更新时的处理"""

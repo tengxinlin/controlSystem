@@ -280,7 +280,7 @@ class LEDManager(QObject):
         try:
             for led in self.leds.values():
                 if led.receive_topic == topic:
-                    status = int(payload.strip())
+                    status = int(payload.strip().split(",")[0])
                     led.update_mqtt_receive(status)
                     self.led_status_changed.emit(led.led_id, led.status)
                     self.led_connection_changed.emit(led.led_id, led.get_connection_status())

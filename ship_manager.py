@@ -37,7 +37,7 @@ class ShipInfo:
     position_and_direction:dict = None  #位置和方向信息
     calc_range:str = None #船舶是否在上下水计算范围，"up"，‘down’
     up_or_down: list = None  #四个bool值列表，true为下水，false为上水
-    status: str = None #船舶的状态，上水、下水、停靠、特殊
+    status: str = None #船舶的状态，上水、下水、停靠、特殊、未知
     shipType: str =None  #船舶的人工设定状态,None:未设定，'up','down','docked','special'
     staticInfo: dict = None #船舶静态信息
     is_arrived: bool = False #是否抵达揭示区
@@ -173,7 +173,7 @@ class ShipManager(QObject):
                 # staticInfo = self.api_service.get_static_info(mmsi)
                 # ship.static_info = staticInfo
 
-                #计算船舶的位置和方向,方向是docked就表示是停泊了，是up或down表示这次判断
+                #计算船舶的位置和方向,方向是docked就表示是停泊了，是up或down表示这次判断,如果是unknown就是再计算里程线外了
                 position_and_direction=self.calculate_ship_position_and_direction(
                      latitude, longitude, course,speed
                 )
@@ -187,6 +187,9 @@ class ShipManager(QObject):
                     old_ship.up_or_down.append(True)
                 if position_and_direction["direction"] == "docked":
                     ship.status='docked'
+                if position_and_direction["direction"] == "unknown":
+                    ship.status='unknown'
+
 
                 #船舶不是特殊船舶就再调用一次
                 if old_ship.status!= 'special':

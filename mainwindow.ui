@@ -196,17 +196,17 @@
               </property>
              </widget>
             </item>
-            <item row="1" column="1">
-             <widget class="QLabel" name="label_5">
-              <property name="text">
-               <string>TextLabel</string>
-              </property>
-             </widget>
-            </item>
             <item row="1" column="0">
              <widget class="QPushButton" name="voice_btn">
               <property name="text">
                <string>语音设置</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QPushButton" name="shift_btn">
+              <property name="text">
+               <string>值班</string>
               </property>
              </widget>
             </item>

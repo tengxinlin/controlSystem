@@ -433,6 +433,7 @@ class ControlReach:
     """控制河段数据"""
     reach_name: str
     reach_code: str
+    reach_id:str
     center_point: ReachPoint  # 地图中心点
 
     # 上下界限标

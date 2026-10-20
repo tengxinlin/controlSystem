@@ -662,11 +662,91 @@ class APIService:
     def get_ship_static_info(self,mmsi):
         data = self.api_manager.get("/api/Ship/GetShipStatic", {"MMSI": mmsi})
         return data
+
+    def get_miles(self,start,end):
+        data=self.api_manager.get("/api/Web/getMiles",{"startMile":start,"endMile":end})
+        return data
+
+    def get_department_list(self):
+        """获取部门列表"""
+        try:
+
+            data = self.api_manager.get("/api/Department/GetDepartmentList")
+
+            return data
+        except Exception as e:
+            print(f"获取部门列表失败: {e}")
+            return None
+
+    def get_user_list(self):
+        """获取人员列表"""
+        try:
+            data = self.api_manager.get("/api/User/GetUserList")
+
+            return data
+        except Exception as e:
+            print(f"获取人员列表失败: {e}")
+            return None
+
+    def record_shift_infor(self, mast_worker: str, password: str,
+                           vice_worker: str, date_from: str, date_to: str,
+                           work_memo: str, reach_id: int) -> dict:
+        """
+        记录交接班信息
+
+        Returns:
+            dict: {'success': bool, 'session_id': str, 'error': str}
+        """
+        try:
+            url = f"/api/Command/RecordShiftInfor"
+            payload = {
+                "mastWorker": mast_worker,
+                "password": aes_encrypt(password),
+                "viceWorker": vice_worker,
+                "dateFrom": date_from,
+                "dateTo": date_to,
+                "workMemo": work_memo,
+                "reachId": reach_id
+            }
+
+            response = self.api_manager.post(url, payload)
+            if response["data"]:
+                self.api_manager.session_id = response["data"]["sessionId"]
+            return response
+            #     data = response.json()
+            #     if data.get('data') and data['data'].get('sessionId'):
+            #         return {
+            #             'success': True,
+            #             'session_id': data['data']['sessionId']
+            #         }
+            #     else:
+            #         return {
+            #             'success': False,
+            #             'error': data.get('message', '交接班失败')
+            #         }
+            # else:
+            #     return {
+            #         'success': False,
+            #         'error': f'HTTP错误: {response.status_code}'
+            #     }
+
+        except Exception as e:
+            print(f"交接班请求失败: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+
 # ========== 使用示例 ==========
 if __name__ == "__main__":
     api=APIService("http://isc.cqu.edu.cn:23456")
     arr=api.login("梁山", "Cqhdj@2024")
     print(arr)
     print(api.get_session_id())
-    users=api.getAllReaches()
+    users=api.get_user_list()
+    departments=api.get_department_list()
+
+
+    print(departments)
     print(users)

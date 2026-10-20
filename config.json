@@ -29,13 +29,13 @@
             "name": "外网"
         }
     },
-    "controlRiverName": "铜鼓滩",
-    "reachCode": 12,
+    "controlRiverName": "铜锣峡",
+    "reachCode": 35,
     "shipDataSource": "ais",
     "aisTimeliness": 5,
     "InternetType": "外网",
-    "waterLevel": 2.2,
-    "weather": "晴",
+    "waterLevel": 3.0,
+    "weather": "阴",
     "weather_list": [
         "晴",
         "阴",

@@ -34,7 +34,8 @@ class PassageRecordManager(QObject):
         """加载活跃记录到缓存"""
         active_records = self.db.get_active_records()
         for record in active_records:
-            self._active_cache[record['mmsi']] = record
+            if record['create_time'] < datetime.today().timestamp():
+                self._active_cache[record['mmsi']] = record
         print(f"加载了 {len(self._active_cache)} 条活跃记录到缓存")
 
     def create_record(self, mmsi: str, name: str, direction: str) -> Optional[Dict]:
