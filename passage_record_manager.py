@@ -38,7 +38,7 @@ class PassageRecordManager(QObject):
                 self._active_cache[record['mmsi']] = record
         print(f"加载了 {len(self._active_cache)} 条活跃记录到缓存")
 
-    def create_record(self, mmsi: str, name: str, direction: str) -> Optional[Dict]:
+    def create_record(self, mmsi: str, name: str, direction: str,reach_code:str) -> Optional[Dict]:
         """
         创建新的通行记录（船舶进入揭示区时调用）
 
@@ -46,12 +46,13 @@ class PassageRecordManager(QObject):
             mmsi: 船舶MMSI
             name: 船舶名称
             direction: 方向 ('up' 或 'down')
+            reach_code: 控制河段
 
         Returns:
             创建的记录字典
         """
         # 检查是否已有活跃记录
-        existing = self.db.get_active_by_mmsi(mmsi)
+        existing = self.db.get_active_by_mmsi(mmsi,reach_code)
         if existing:
             # 检查是否超时
             current_time = int(time.time())

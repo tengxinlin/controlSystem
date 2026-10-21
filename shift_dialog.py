@@ -687,7 +687,7 @@ class ShiftDialog(QDialog):
                                         f"交接班成功！\n主接班人: {mast_worker}\n副接班人: {vice_worker}")
                 session=result["data"]["sessionId"]
                 self.shift_success.emit(True,session)
-                self.accept()
+                # self.accept()
 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"交接班异常: {e}")

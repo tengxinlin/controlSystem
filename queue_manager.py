@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import time
 from PyQt5.QtCore import QObject, pyqtSignal
+from numpy.core.records import record
 
 
 class QueueManager(QObject):
@@ -12,13 +13,17 @@ class QueueManager(QObject):
     pending_queue_changed = pyqtSignal(dict)  # 待指挥队列变化
     commanded_queue_changed = pyqtSignal(dict)  # 已指挥队列变化
     control_area_queue_changed = pyqtSignal(dict)  # 控制河段区域内队列变化
+    upload_passage_record=pyqtSignal(dict) #需要上传到服务器的通行记录
 
-    def __init__(self,passage_record_manager,get_signal_callback,log_current_message,current_reach):
+
+    def __init__(self,passage_record_manager,get_signal_callback,log_current_message,current_reach,get_api_service):
         super().__init__()
         self.passage_record_manager = passage_record_manager#船舶记录管理器
         self.get_signal_callback = get_signal_callback
         self.log_current_message = log_current_message
         self.current_reach=current_reach
+        self.get_api_service=get_api_service
+
         # 待指挥队列（在上下水计算范围内，等待指挥）
         self.pending_queue: Dict[str, dict] = {}  # mmsi -> ship_info
 
@@ -288,8 +293,45 @@ class QueueManager(QObject):
             records = self.passage_record_manager.get_records_by_mmsi(mmsi)
             if records:
                 record = records[0]  # 最新的一条
+                #获取到的数据库的字段与上传到web段的字段名字不一样，需要变换
+                dict={}
+                dict["id"]=record['oracleID']
+                dict["weather"]=record['weather']
+                dict["reachId"]=record['reachId']
+                dict['shipMmsi'] = mmsi
+                dict["shipName"]=record['name']
+                dict["tugboatNumber"]=record['tug_count']
+                dict["shipUpOrDown"]= 0 if record['direction']=="up" else 1
+                ts=record.get("creat_time",0)
+                dict["operatTime"] = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                ts=record.get("forecast_time",0)
+                dict["noticeTime"]=datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                ts=record.get("supplement_time",0)
+                dict["supplementTime"]=datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                ts=record.get("start_hang_time",0)
+                dict["suspendTime"]=datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                ts=record.get("half_pole_time",0)
+                dict["halfTime"]=datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                ts=record.get("enter_channel_time",0)
+                dict["slotTime"]=datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                ts=record.get("exit_channel_time",0)
+                dict["outTime"]=datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else ""
+                dict["goods"]=record['cargo']
+                dict["tonnage"]=record['actual_load']
+                dict['maxTonnage']=record['rated_load']
+                dict["maxDraught"]=record['draught']
+                dict["waterLevel"]=record['water_level']
+                dict["attendant"]=record['duty_person']
+                dict["remarks"]=record['remarks']
+                dict["reachWork"]=0 if record['reach_work']== "收班" else 1
+                dict["reachCode"]=record['reach_code']
+
+                print(f"构造的上传web的字典{dict}")
+
                 # 调用你的 API 上传方法
-                self.log_current_message(f"📤 上传船舶 {mmsi} 通行记录到服务器: {record}")
+                self.get_api_service.upload_record(dict)
+
+                self.log_current_message(f"📤 上传船舶 {mmsi} 通行记录到服务器: {record}   {dict}")
                 # 示例: self.api.upload_passage(record)
 
 

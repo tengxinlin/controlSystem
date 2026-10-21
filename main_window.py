@@ -187,14 +187,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 创建队列管理器
         from queue_manager import QueueManager
-        self.queue_manager = QueueManager(self.passage_record_manager,self.get_current_signal,self.log_message,self.current_reach)
+        self.queue_manager = QueueManager(self.passage_record_manager,self.get_current_signal,self.log_message,self.current_reach,self.get_api_service)
 
         # 创建队列处理器
         self.queue_processor = None
         self.current_signal = '关闭'  # 控制河段的信号,关闭，上水，下水，半杆，禁航
-
-        #api接口
-        self.api = api_service
 
         # 初始化更新数据库
         # self.initLocalDB()
@@ -308,6 +305,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # 是否值班
         self.isDuty=False
+
+    def get_api_service(self):
+        return self.api_service
+
 
     def show_shift_dialog(self):
         """显示值班交接班对话框"""
@@ -1476,7 +1477,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             #设置新的queue_manager
             self.queue_manager = QueueManager(self.passage_record_manager, self.get_current_signal, self.log_message,
-                                              self.current_reach)
+                                              self.current_reach,self.get_api_service)
 
 
             # 初始化LED管理器
@@ -1519,6 +1520,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.voice_manager.speak_finished.connect(self.on_voice_finished)
             self.voice_manager.speak_error.connect(self.on_voice_error)
 
+            # 通行记录管理界面（单例）重新去生成界面
+            self.passage_record_dialog = None
 
             # 添加防重复标志
             self.is_processing_signal = False

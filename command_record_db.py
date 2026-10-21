@@ -33,7 +33,13 @@ class CommandRecordDB:
         "exit_channel_time": "INTEGER DEFAULT 0",  # 出漕时间戳
         "create_time": "INTEGER DEFAULT 0",  # 创建时间戳
         "last_update": "INTEGER DEFAULT 0",  # 最后更新时间戳
-        "is_active": "INTEGER DEFAULT 1"  # 是否活跃记录（1=活跃，0=已完成）
+        "is_active": "INTEGER DEFAULT 1" , # 是否活跃记录（1=活跃，0=已完成）
+        "oracleID": "INTEGER DEFAULT 0" ,#上传数据库的oracleID
+        "reachId":"TEXT",
+        "reach_code": "TEXT",
+        "draught":"TEXT",
+        "reach_work":"TEXT",
+
     }
 
     def __init__(self, db_manager: SQLiteTableManager):
@@ -101,18 +107,20 @@ class CommandRecordDB:
             mmsi
         )
 
-    def get_active_by_mmsi(self, mmsi: str) -> Optional[Dict]:
+    def get_active_by_mmsi(self, mmsi: str,reach_code:str) -> Optional[Dict]:
         """
         获取船舶的活跃记录
 
         Args:
             mmsi: 船舶MMSI
-
+        reach_code: 控制河段
         Returns:
             Dict: 记录字典，如果没有返回None
+
         """
         conditions = {
-            'MMSI': mmsi,
+            'mmsi': mmsi,
+            'reach_code': reach_code,
             'is_active': 1
         }
         results = self.db.search_records(self.TABLE_NAME, conditions)

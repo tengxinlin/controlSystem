@@ -713,22 +713,6 @@ class APIService:
             if response["data"]:
                 self.api_manager.session_id = response["data"]["sessionId"]
             return response
-            #     data = response.json()
-            #     if data.get('data') and data['data'].get('sessionId'):
-            #         return {
-            #             'success': True,
-            #             'session_id': data['data']['sessionId']
-            #         }
-            #     else:
-            #         return {
-            #             'success': False,
-            #             'error': data.get('message', '交接班失败')
-            #         }
-            # else:
-            #     return {
-            #         'success': False,
-            #         'error': f'HTTP错误: {response.status_code}'
-            #     }
 
         except Exception as e:
             print(f"交接班请求失败: {e}")
@@ -736,6 +720,45 @@ class APIService:
                 'success': False,
                 'error': str(e)
             }
+
+
+    def SetShipPassRecord(self,record:dict):
+        """上传船舶通行记录到云端"""
+        """entity.Add("Id", id);
+            entity.Add("MMSI", scri.mmsi);
+            entity.Add("ShipName", scri.name);
+            entity.Add("Tug", scri.tug);
+            entity.Add("UpDn", scri.updn);
+            entity.Add("NoticeTime", scri.noticeTime);
+            entity.Add("SupplementTime", scri.supplementTime);
+            entity.Add("SuspendTime", scri.suspendTime);
+            entity.Add("HalfTime", scri.halfTime);
+            entity.Add("SlotTime", scri.slotTime);
+            entity.Add("OutTime", scri.outTime);
+            entity.Add("PassTime", scri.passTime);
+            entity.Add("Remarks", scri.remarks);
+            entity.Add("Goods", scri.goods);
+            entity.Add("RealTonnage", scri.tonnage);
+            entity.Add("MaxTonnage", scri.maxTonnage);
+            entity.Add("Draught", scri.maxDraught);
+            entity.Add("WaterLevel", scri.waterLevel);
+            entity.Add("WorkPerson", scri.workPerson);
+            entity.Add("ReachWork", scri.reachWork);
+            entity.Add("OperatTime", Convert.ToDateTime(scri.operatTime));
+            entity.Add("Weather", scri.weather);
+            entity.Add("ReachId", MainForm.reachId.ToString());
+            entity.Add("ReachCode", MainForm.reachCode.ToString());
+            entity.Add("ReachName", scri.controlRiver);
+            entity.Add("IsComplete", scri.isComplete ? "1" : "0");
+            entity.Add("TipTime", scri.tipTime);
+            entity.Add("RemoteDbID", scri.oracleID);
+            entity.Add("IsDel", "0");"""
+        url = f"/api/Ship/SetShipPassRecord"
+        response = self.api_manager.post(url,record)
+        if response and response["errorMsg"]!="":
+            return response
+        else:
+            return None
 
 
 # ========== 使用示例 ==========

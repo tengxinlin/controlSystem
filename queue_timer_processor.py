@@ -23,6 +23,7 @@ class QueueTimerProcessor(QObject):
         self.queue_manager.commanded_queue_changed.connect(self.update_commanded_queue)
         self.queue_manager.control_area_queue_changed.connect(self.update_control_queue)
 
+
         # 记录被取消的船舶（2分钟内不再弹窗）
         self.cancelled_ships = {}  # mmsi -> 取消时间
 
